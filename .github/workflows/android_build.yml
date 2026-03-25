@@ -29,11 +29,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Встановлюємо бібліотеки
-        run: pip install -r requirements.txt
+      - name: Встановлюємо стабільну версію Flet
+        run: pip install flet==0.28.3
 
       - name: МАГІЯ! Збираємо APK файл
-        run: flet build apk --project-name "pigstress" --product "PigStress AI Pro" --org "com.yourname.pigstress"
+        run: flet build apk --product "PigStress" --org "com.roman.pigstress"
 
       - name: Зберігаємо готовий додаток
         uses: actions/upload-artifact@v4
