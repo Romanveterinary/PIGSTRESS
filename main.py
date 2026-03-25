@@ -1,6 +1,6 @@
 import flet as ft
 import os
-import sys  # Додано для пошуку правильного шляху .exe
+import sys
 import time
 import datetime
 import json
@@ -93,9 +93,9 @@ REPORT_TEMPLATE_EN = """
 LANG = {
     "uk": {
         "wait": "ОЧІКУВАННЯ", "analyzing": "АНАЛІЗ...", "no_photo": "❌ Завантажте фото!",
-        "settings": "⚙️ Налаштування", "save": "Зберегти", "saved": "✅ Збережено у HTML!",
+        "settings": "⚙️ Налаштування", "save": "Зберегти", "saved": "✅ Збережено!",
         "key_hint": "API ключ:", "photo_hint": "Зробіть фото...",
-        "api_error": "❌ Введіть ключ в налаштуваннях!", "report_saved": "📁 HTML Звіт збережено!",
+        "api_error": "❌ Введіть ключ в налаштуваннях!", "report_saved": "📁 Звіт успішно збережено!",
         "no_report": "❌ Немає даних для збереження!",
         "quality_title": "🔍 ПЕРЕВІРКА ЯКОСТІ ФОТО",
         "quality_hint": "Ваше фото має відповідати силуету:\n1. Тварина в центрі.\n2. Термограма в кутку чітка.\n3. Знімок не змазаний.",
@@ -113,9 +113,9 @@ LANG = {
     },
     "en": {
         "wait": "WAITING", "analyzing": "ANALYZING...", "no_photo": "❌ Upload photo!",
-        "settings": "⚙️ Settings", "save": "Save", "saved": "✅ Saved to HTML!",
+        "settings": "⚙️ Settings", "save": "Save", "saved": "✅ Saved!",
         "key_hint": "API key:", "photo_hint": "Take photo...",
-        "api_error": "❌ Enter API key in settings!", "report_saved": "📁 HTML Report saved!",
+        "api_error": "❌ Enter API key in settings!", "report_saved": "📁 Report saved successfully!",
         "no_report": "❌ No data to save!",
         "quality_title": "🔍 PHOTO QUALITY CHECK",
         "quality_hint": "Your photo must match the silhouette:\n1. Animal is centered.\n2. Thermal map is clear.\n3. Image is not blurred.",
@@ -143,20 +143,12 @@ def main(page: ft.Page):
     current_img_path = [None]
     last_report_text = [""]
 
-    # ==========================================
-    # 🔥 МАГІЧНИЙ ФІКС ДЛЯ ПАПОК У .EXE
-    # ==========================================
     if getattr(sys, 'frozen', False):
-        # Якщо запущено як згенерований .exe файл
         SAFE_DIR = os.path.dirname(sys.executable)
     else:
-        # Якщо запущено через VS Code (Play)
         SAFE_DIR = os.path.dirname(os.path.abspath(__file__))
 
     KEY_FILE = os.path.join(SAFE_DIR, "pig_api_key.txt")
-    REPORTS_DIR = os.path.join(SAFE_DIR, "Pig_Reports")
-    if not os.path.exists(REPORTS_DIR):
-        os.makedirs(REPORTS_DIR)
 
     def get_saved_key():
         try:
@@ -187,6 +179,10 @@ def main(page: ft.Page):
 
     fp_picker = ft.FilePicker()
     page.overlay.append(fp_picker)
+    
+    # 🔥 НОВИЙ ІНСТРУМЕНТ: Збереження файлів через системне вікно Android/Windows
+    save_picker = ft.FilePicker()
+    page.overlay.append(save_picker)
 
     def on_file_picked(e):
         if e.files and len(e.files) > 0:
@@ -205,6 +201,53 @@ def main(page: ft.Page):
             report_container.visible = False
             page.update()
     fp_picker.on_result = on_file_picked
+
+    # 🔥 ФУНКЦІЯ, ЯКА РЕАГУЄ НА ВИБІР ПАПКИ КОРИСТУВАЧЕМ
+    def on_save_result(e: ft.FilePickerResultEvent):
+        if e.path:
+            try:
+                with open(current_img_path[0], "rb") as img_f:
+                    b64_img = base64.b64encode(img_f.read()).decode("utf-8")
+                    
+                header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ ЗВІТ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL REPORT"
+                
+                html_content = f"""<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>{header_txt}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; max-width: 800px; margin: auto; color: #333; }}
+        h1 {{ text-align: center; color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 10px; }}
+        .date {{ text-align: right; color: #777; font-style: italic; }}
+        .photo-container {{ text-align: center; margin: 20px 0; }}
+        img {{ max-width: 100%; max-height: 500px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #ddd; }}
+        .report-box {{ background: #f8f9fa; padding: 25px; border-radius: 12px; border: 1px solid #e0e0e0; font-size: 16px; line-height: 1.6; white-space: pre-wrap; }}
+    </style>
+</head>
+<body>
+    <h1>📋 {header_txt}</h1>
+    <div class="date">Дата генерації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+    
+    <div class="photo-container">
+        <img src="data:image/jpeg;base64,{b64_img}" alt="Analyzed Photo" />
+    </div>
+    
+    <div class="report-box">
+{last_report_text[0]}
+    </div>
+</body>
+</html>"""
+                with open(e.path, "w", encoding="utf-8") as f:
+                    f.write(html_content)
+                    
+                page.snack_bar = ft.SnackBar(ft.Text(LANG[current_lang[0]]['report_saved']), bgcolor="green")
+                page.snack_bar.open = True
+            except Exception as ex: 
+                print("Помилка збереження:", ex)
+            page.update()
+
+    save_picker.on_result = on_save_result
 
     dd_location = ft.Dropdown(
         label=LANG[current_lang[0]]["location_label"],
@@ -464,58 +507,18 @@ def main(page: ft.Page):
         report_container.visible = False
         page.update()
 
-    def on_save_report(e):
+    # 🔥 ФУНКЦІЯ, ЯКА ВИКЛИКАЄ ВІКНО ЗБЕРЕЖЕННЯ
+    def on_save_report_click(e):
         if not last_report_text[0] or not current_img_path[0]: return
-        
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filepath = os.path.join(REPORTS_DIR, f"PigStress_Report_{timestamp}.html")
-        
-        try:
-            with open(current_img_path[0], "rb") as img_f:
-                b64_img = base64.b64encode(img_f.read()).decode("utf-8")
-                
-            header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ ЗВІТ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL REPORT"
-            
-            html_content = f"""<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="utf-8">
-    <title>{header_txt}</title>
-    <style>
-        body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; max-width: 800px; margin: auto; color: #333; }}
-        h1 {{ text-align: center; color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 10px; }}
-        .date {{ text-align: right; color: #777; font-style: italic; }}
-        .photo-container {{ text-align: center; margin: 20px 0; }}
-        img {{ max-width: 100%; max-height: 500px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #ddd; }}
-        .report-box {{ background: #f8f9fa; padding: 25px; border-radius: 12px; border: 1px solid #e0e0e0; font-size: 16px; line-height: 1.6; white-space: pre-wrap; }}
-    </style>
-</head>
-<body>
-    <h1>📋 {header_txt}</h1>
-    <div class="date">Дата генерації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
-    
-    <div class="photo-container">
-        <img src="data:image/jpeg;base64,{b64_img}" alt="Analyzed Photo" />
-    </div>
-    
-    <div class="report-box">
-{last_report_text[0]}
-    </div>
-</body>
-</html>"""
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(html_content)
-                
-            page.snack_bar = ft.SnackBar(ft.Text(f"{LANG[current_lang[0]]['report_saved']} \n{filepath}"), bgcolor="green")
-            page.snack_bar.open = True
-        except Exception as ex: 
-            print("Помилка збереження:", ex)
-            pass
-        page.update()
+        save_picker.save_file(
+            file_name=f"PigStress_Report_{timestamp}.html",
+            allowed_extensions=["html"]
+        )
 
     btn_pick = ft.IconButton(icon=ft.Icons.ADD_A_PHOTO_ROUNDED, icon_size=50, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files())
     btn_analyze = ft.IconButton(icon=ft.Icons.FINGERPRINT, icon_size=50, icon_color="green_700", visible=False, on_click=on_analyze)
-    btn_save = ft.IconButton(icon=ft.Icons.SAVE_ALT, icon_size=50, icon_color="deep_orange_700", visible=False, on_click=on_save_report, tooltip="Зберегти звіт (HTML + Фото)")
+    btn_save = ft.IconButton(icon=ft.Icons.SAVE_ALT, icon_size=50, icon_color="deep_orange_700", visible=False, on_click=on_save_report_click, tooltip="Зберегти звіт (HTML + Фото)")
 
     main_buttons_row = ft.Row([btn_pick, btn_analyze, btn_save], alignment=ft.MainAxisAlignment.SPACE_EVENLY, visible=True)
 
