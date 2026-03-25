@@ -180,7 +180,6 @@ def main(page: ft.Page):
     fp_picker = ft.FilePicker()
     page.overlay.append(fp_picker)
     
-    # 🔥 НОВИЙ ІНСТРУМЕНТ: Збереження файлів через системне вікно Android/Windows
     save_picker = ft.FilePicker()
     page.overlay.append(save_picker)
 
@@ -202,16 +201,12 @@ def main(page: ft.Page):
             page.update()
     fp_picker.on_result = on_file_picked
 
-    # 🔥 ФУНКЦІЯ, ЯКА РЕАГУЄ НА ВИБІР ПАПКИ КОРИСТУВАЧЕМ
-    def on_save_result(e: ft.FilePickerResultEvent):
-        if e.path:
-            try:
-                with open(current_img_path[0], "rb") as img_f:
-                    b64_img = base64.b64encode(img_f.read()).decode("utf-8")
-                    
-                header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ ЗВІТ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL REPORT"
-                
-                html_content = f"""<!DOCTYPE html>
+    # ФУНКЦІЯ ГЕНЕРАЦІЇ HTML
+    def get_html_content():
+        with open(current_img_path[0], "rb") as img_f:
+            b64_img = base64.b64encode(img_f.read()).decode("utf-8")
+        header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ ЗВІТ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL REPORT"
+        return f"""<!DOCTYPE html>
 <html lang="uk">
 <head>
     <meta charset="utf-8">
@@ -228,25 +223,27 @@ def main(page: ft.Page):
 <body>
     <h1>📋 {header_txt}</h1>
     <div class="date">Дата генерації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
-    
     <div class="photo-container">
         <img src="data:image/jpeg;base64,{b64_img}" alt="Analyzed Photo" />
     </div>
-    
     <div class="report-box">
 {last_report_text[0]}
     </div>
 </body>
 </html>"""
+
+    # ДЛЯ WINDOWS
+    def on_save_result(e: ft.FilePickerResultEvent):
+        if e.path:
+            try:
+                html_data = get_html_content()
                 with open(e.path, "w", encoding="utf-8") as f:
-                    f.write(html_content)
-                    
+                    f.write(html_data)
                 page.snack_bar = ft.SnackBar(ft.Text(LANG[current_lang[0]]['report_saved']), bgcolor="green")
                 page.snack_bar.open = True
             except Exception as ex: 
                 print("Помилка збереження:", ex)
             page.update()
-
     save_picker.on_result = on_save_result
 
     dd_location = ft.Dropdown(
@@ -507,14 +504,32 @@ def main(page: ft.Page):
         report_container.visible = False
         page.update()
 
-    # 🔥 ФУНКЦІЯ, ЯКА ВИКЛИКАЄ ВІКНО ЗБЕРЕЖЕННЯ
+    # 🔥 РОЗУМНА КНОПКА ЗБЕРЕЖЕННЯ ДЛЯ ANDROID / WINDOWS
     def on_save_report_click(e):
         if not last_report_text[0] or not current_img_path[0]: return
+        
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        save_picker.save_file(
-            file_name=f"PigStress_Report_{timestamp}.html",
-            allowed_extensions=["html"]
-        )
+        filename = f"PigStress_Report_{timestamp}.html"
+        
+        android_downloads = "/storage/emulated/0/Download"
+        if os.path.exists(android_downloads):
+            # Якщо це Android, автоматично кидаємо в Завантаження
+            try:
+                html_data = get_html_content()
+                filepath = os.path.join(android_downloads, filename)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(html_data)
+                page.snack_bar = ft.SnackBar(ft.Text(f"✅ Збережено у папку 'Download' (Завантаження)!\nШукайте файл: {filename}"), bgcolor="green")
+                page.snack_bar.open = True
+                page.update()
+            except Exception as ex:
+                pass
+        else:
+            # На Windows викликаємо красиве вікно "Зберегти як..."
+            save_picker.save_file(
+                file_name=filename,
+                allowed_extensions=["html"]
+            )
 
     btn_pick = ft.IconButton(icon=ft.Icons.ADD_A_PHOTO_ROUNDED, icon_size=50, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files())
     btn_analyze = ft.IconButton(icon=ft.Icons.FINGERPRINT, icon_size=50, icon_color="green_700", visible=False, on_click=on_analyze)
