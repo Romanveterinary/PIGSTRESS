@@ -1,0 +1,42 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch: 
+  push:
+    branches: [ "main" ] 
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Отримуємо ваш код
+        uses: actions/checkout@v4
+
+      - name: Встановлюємо Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Встановлюємо Java (Потрібно для Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Встановлюємо інструменти Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Встановлюємо бібліотеки
+        run: pip install -r requirements.txt
+
+      - name: МАГІЯ! Збираємо APK файл
+        run: flet build apk --project-name "pigstress" --product "PigStress AI Pro" --org "com.yourname.pigstress"
+
+      - name: Зберігаємо готовий додаток
+        uses: actions/upload-artifact@v4
+        with:
+          name: PigStress-Android-APK
+          path: build/apk/**/*.apk
