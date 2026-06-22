@@ -106,6 +106,9 @@ LANG = {
         "loc_piglets": "🧒 Ферма (Поросята на дорощуванні)",
         "loc_transport": "🚚 Транспортування (Кузов)",
         "loc_slaughter": "🔪 Забійний пункт",
+        "sender_label": "📤 Поступили з (Відправник):",
+        "receiver_label": "📥 Прибули в (Отримувач/Забійний пункт):",
+        "not_specified": "Не вказано",
         "levels": {
             "RISK_1": "1: НОРМА", "RISK_2": "2: ТРИВОГА", "RISK_3": "3: ПОМІРНИЙ",
             "RISK_4": "4: ВИСОКИЙ", "RISK_5": "5: КРИТИЧНО", "UNKNOWN": "ПОМИЛКА"
@@ -126,6 +129,9 @@ LANG = {
         "loc_piglets": "🧒 Farm (Weaner Piglets)",
         "loc_transport": "🚚 Transport (Truck)",
         "loc_slaughter": "🔪 Slaughterhouse",
+        "sender_label": "📤 Received from (Sender):",
+        "receiver_label": "📥 Arrived at (Receiver/Slaughterhouse):",
+        "not_specified": "Not specified",
         "levels": {
             "RISK_1": "1: NORMAL", "RISK_2": "2: MILD", "RISK_3": "3: MODERATE",
             "RISK_4": "4: HIGH", "RISK_5": "5: CRITICAL", "UNKNOWN": "ERROR"
@@ -206,6 +212,11 @@ def main(page: ft.Page):
         with open(current_img_path[0], "rb") as img_f:
             b64_img = base64.b64encode(img_f.read()).decode("utf-8")
         header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ ЗВІТ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL REPORT"
+        
+        # Отримуємо значення підприємств для звіту
+        sender_text = tf_sender.value if tf_sender.value else LANG[current_lang[0]]["not_specified"]
+        receiver_text = tf_receiver.value if tf_receiver.value else LANG[current_lang[0]]["not_specified"]
+
         return f"""<!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -214,7 +225,8 @@ def main(page: ft.Page):
     <style>
         body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; max-width: 800px; margin: auto; color: #333; }}
         h1 {{ text-align: center; color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 10px; }}
-        .date {{ text-align: right; color: #777; font-style: italic; }}
+        .header-info {{ background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 16px; border-left: 5px solid #0d47a1; line-height: 1.5; }}
+        .date {{ text-align: right; color: #777; font-style: italic; margin-bottom: 10px; }}
         .photo-container {{ text-align: center; margin: 20px 0; }}
         img {{ max-width: 100%; max-height: 500px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #ddd; }}
         .report-box {{ background: #f8f9fa; padding: 25px; border-radius: 12px; border: 1px solid #e0e0e0; font-size: 16px; line-height: 1.6; white-space: pre-wrap; }}
@@ -223,6 +235,12 @@ def main(page: ft.Page):
 <body>
     <h1>📋 {header_txt}</h1>
     <div class="date">Дата генерації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+    
+    <div class="header-info">
+        <strong>{LANG[current_lang[0]]['sender_label']}</strong> {sender_text}<br>
+        <strong>{LANG[current_lang[0]]['receiver_label']}</strong> {receiver_text}
+    </div>
+
     <div class="photo-container">
         <img src="data:image/jpeg;base64,{b64_img}" alt="Analyzed Photo" />
     </div>
@@ -232,7 +250,6 @@ def main(page: ft.Page):
 </body>
 </html>"""
 
-    # ДЛЯ WINDOWS
     def on_save_result(e: ft.FilePickerResultEvent):
         if e.path:
             try:
@@ -245,6 +262,13 @@ def main(page: ft.Page):
                 print("Помилка збереження:", ex)
             page.update()
     save_picker.on_result = on_save_result
+
+    # === БЛОК ПІДПРИЄМСТВ ТА КЕШУВАННЯ ===
+    last_sender = page.client_storage.get("last_sender") or ""
+    last_receiver = page.client_storage.get("last_receiver") or ""
+
+    tf_sender = ft.TextField(label=LANG[current_lang[0]]["sender_label"], value=last_sender, width=380, border_color="blue_400")
+    tf_receiver = ft.TextField(label=LANG[current_lang[0]]["receiver_label"], value=last_receiver, width=380, border_color="blue_400")
 
     dd_location = ft.Dropdown(
         label=LANG[current_lang[0]]["location_label"],
@@ -260,7 +284,7 @@ def main(page: ft.Page):
     )
     
     cb_legal_audit = ft.Checkbox(label=LANG[current_lang[0]]["legal_check"], value=False, fill_color="blue_900")
-    options_panel = ft.Column([dd_location, cb_legal_audit], visible=False, spacing=10)
+    options_panel = ft.Column([tf_sender, tf_receiver, dd_location, cb_legal_audit], visible=False, spacing=10)
 
     btn_lang = ft.TextButton("🇺🇦 UK", on_click=lambda e: toggle_language())
     def toggle_language():
@@ -271,6 +295,10 @@ def main(page: ft.Page):
         quality_check_hint_text.value = LANG[current_lang[0]]["quality_hint"]
         btn_confirm_quality.content.controls[1].value = LANG[current_lang[0]]["confirm"]
         btn_retake_quality.content.controls[1].value = LANG[current_lang[0]]["retake"]
+        
+        # Переклад нових полів
+        tf_sender.label = LANG[current_lang[0]]["sender_label"]
+        tf_receiver.label = LANG[current_lang[0]]["receiver_label"]
         
         dd_location.label = LANG[current_lang[0]]["location_label"]
         dd_location.options = [
@@ -364,6 +392,10 @@ def main(page: ft.Page):
 
     def process_analysis():
         current_date = datetime.datetime.now().strftime("%B %Y")
+        
+        # ЗБЕРЕЖЕННЯ В КЕШ: запам'ятовуємо введені дані
+        page.client_storage.set("last_sender", tf_sender.value)
+        page.client_storage.set("last_receiver", tf_receiver.value)
         
         loc_val = dd_location.value
         if loc_val == "farm":
@@ -467,6 +499,11 @@ def main(page: ft.Page):
         btn_save.visible = True 
         dd_location.disabled = False
         cb_legal_audit.disabled = False 
+        
+        # Залишаємо поля активними, щоб можна було виправити помилку, якщо лікар одруківся
+        tf_sender.disabled = False
+        tf_receiver.disabled = False
+        
         page.update()
 
     def on_analyze(e):
@@ -480,6 +517,11 @@ def main(page: ft.Page):
         btn_save.visible = False
         dd_location.disabled = True
         cb_legal_audit.disabled = True 
+        
+        # Блокуємо поля під час аналізу
+        tf_sender.disabled = True
+        tf_receiver.disabled = True
+        
         ai_answer.value = ""
         report_container.visible = False
         page.update()
