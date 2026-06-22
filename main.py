@@ -8,6 +8,14 @@ import base64
 import urllib.request
 import threading
 
+# Безпечний імпорт для роботи з GPS-даними фотографії
+try:
+    from PIL import Image
+    from PIL.ExifTags import TAGS, GPSTAGS
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
 # ==========================================
 # CONFIGURATION & AI SYSTEM PROMPT
 # ==========================================
@@ -101,13 +109,18 @@ LANG = {
         "quality_hint": "Ваше фото має відповідати силуету:\n1. Тварина в центрі.\n2. Термограма в кутку чітка.\n3. Знімок не змазаний.",
         "confirm": "✅ ПІДТВЕРДИТИ", "retake": "🔄 ПЕРЕРОБИТИ", "analyze_ready": "🤖 ГОТОВИЙ ДО АНАЛІЗУ",
         "legal_check": "⚖️ Юридичний аудит (Закони України)",
-        "location_label": "📍 Оберіть локацію та вік:",
+        "location_label": "📍 Оберіть тип локації:",
         "loc_farm": "🚜 Ферма (Відгодівля)", 
         "loc_piglets": "🧒 Ферма (Поросята на дорощуванні)",
         "loc_transport": "🚚 Транспортування (Кузов)",
         "loc_slaughter": "🔪 Забійний пункт",
         "sender_label": "📤 Поступили з (Відправник):",
         "receiver_label": "📥 Прибули в (Отримувач/Забійний пункт):",
+        "address_label": "📍 Географічна адреса (авто-GPS або текст):",
+        "gps_searching": "🔍 Пошук точної адреси по GPS фото...",
+        "gps_not_found": "GPS дані відсутні (можна ввести адресу вручну)",
+        "report_saved_title": "✅ ЗВІТ ЗБЕРЕЖЕНО",
+        "report_saved_msg": "Акт успішно збережено у папку 'Download' (Завантаження)!\nНазва файлу: ",
         "not_specified": "Не вказано",
         "levels": {
             "RISK_1": "1: НОРМА", "RISK_2": "2: ТРИВОГА", "RISK_3": "3: ПОМІРНИЙ",
@@ -124,13 +137,18 @@ LANG = {
         "quality_hint": "Your photo must match the silhouette:\n1. Animal is centered.\n2. Thermal map is clear.\n3. Image is not blurred.",
         "confirm": "✅ CONFIRM", "retake": "🔄 RETAKE", "analyze_ready": "🤖 READY TO ANALYZE",
         "legal_check": "⚖️ Legal Audit (Laws of Ukraine)",
-        "location_label": "📍 Select Location & Age:",
+        "location_label": "📍 Select Location Type:",
         "loc_farm": "🚜 Farm (Rearing Finishers)", 
         "loc_piglets": "🧒 Farm (Weaner Piglets)",
         "loc_transport": "🚚 Transport (Truck)",
         "loc_slaughter": "🔪 Slaughterhouse",
         "sender_label": "📤 Received from (Sender):",
         "receiver_label": "📥 Arrived at (Receiver/Slaughterhouse):",
+        "address_label": "📍 Geographic Address (auto-GPS or manual):",
+        "gps_searching": "🔍 Looking up address via photo GPS...",
+        "gps_not_found": "GPS data missing (input address manually)",
+        "report_saved_title": "✅ REPORT SAVED",
+        "report_saved_msg": "Report successfully saved to 'Download' folder!\nFilename: ",
         "not_specified": "Not specified",
         "levels": {
             "RISK_1": "1: NORMAL", "RISK_2": "2: MILD", "RISK_3": "3: MODERATE",
@@ -183,11 +201,88 @@ def main(page: ft.Page):
     )
     page.overlay.append(dlg_settings)
 
+    # Велике діалогове вікно підтвердження збереження
+    dlg_saved = ft.AlertDialog(
+        title=ft.Text(""),
+        content=ft.Text(""),
+        actions=[ft.ElevatedButton("OK", on_click=lambda e: close_saved_dialog())]
+    )
+    page.overlay.append(dlg_saved)
+
+    def close_saved_dialog():
+        dlg_saved.open = False
+        page.update()
+
+    def show_saved_dialog(title, message):
+        dlg_saved.title.value = title
+        dlg_saved.content.value = message
+        dlg_saved.open = True
+        page.update()
+
     fp_picker = ft.FilePicker()
     page.overlay.append(fp_picker)
     
     save_picker = ft.FilePicker()
     page.overlay.append(save_picker)
+
+    # Асинхронна функція зчитування GPS та визначення текстової адреси з карт
+    def extract_gps_async(img_path):
+        if not HAS_PIL:
+            tf_address.value = LANG[current_lang[0]]["gps_not_found"]
+            page.update()
+            return
+        
+        tf_address.value = LANG[current_lang[0]]["gps_searching"]
+        page.update()
+        
+        try:
+            img = Image.open(img_path)
+            exif = img._getexif()
+            if not exif:
+                tf_address.value = LANG[current_lang[0]]["gps_not_found"]
+                page.update()
+                return
+                
+            gps_info = {}
+            for tag, value in exif.items():
+                decoded = TAGS.get(tag, tag)
+                if decoded == "GPSInfo":
+                    for t in value:
+                        sub_decoded = GPSTAGS.get(t, t)
+                        gps_info[sub_decoded] = value[t]
+                        
+            if "GPSLatitude" in gps_info and "GPSLongitude" in gps_info:
+                lat = gps_info["GPSLatitude"]
+                lon = gps_info["GPSLongitude"]
+                
+                lat_deg = float(lat[0]) + float(lat[1])/60.0 + float(lat[2])/3600.0
+                lon_deg = float(lon[0]) + float(lon[1])/60.0 + float(lon[2])/3600.0
+                
+                if gps_info.get("GPSLatitudeRef") == "S": lat_deg = -lat_deg
+                if gps_info.get("GPSLongitudeRef") == "W": lon_deg = -lon_deg
+                
+                # Використовуємо безкоштовний сервіс OpenStreetMap Nominatim для реверсивного геокодування адреси
+                url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat_deg}&lon={lon_deg}&addressdetails=1"
+                req = urllib.request.Request(url, headers={'User-Agent': 'PigStressAI/1.0'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    addr = data.get("address", {})
+                    parts = []
+                    if "state" in addr: parts.append(addr["state"])
+                    if "county" in addr: parts.append(addr["county"])
+                    if "village" in addr: parts.append(addr["village"])
+                    elif "town" in addr: parts.append(addr["town"])
+                    elif "city" in addr: parts.append(addr["city"])
+                    
+                    if parts:
+                        tf_address.value = ", ".join(parts)
+                    else:
+                        tf_address.value = f"Широта: {lat_deg:.4f}, Довгота: {lon_deg:.4f}"
+            else:
+                tf_address.value = LANG[current_lang[0]]["gps_not_found"]
+        except Exception as e:
+            tf_address.value = LANG[current_lang[0]]["gps_not_found"]
+        page.update()
 
     def on_file_picked(e):
         if e.files and len(e.files) > 0:
@@ -205,17 +300,61 @@ def main(page: ft.Page):
             options_panel.visible = False
             report_container.visible = False
             page.update()
+            
+            # Запускаємо фоновий пошук геолокації по фотографії
+            threading.Thread(target=extract_gps_async, args=(path,), daemon=True).start()
+            
     fp_picker.on_result = on_file_picked
 
-    # ФУНКЦІЯ ГЕНЕРАЦІЇ HTML
+    # ФУНКЦІЯ ГЕНЕРАЦІЇ HTML ЗВІТУ (З ЮРИДИЧНИМ ЗАХИСТОМ ТА ПІДПИСОМ)
     def get_html_content():
         with open(current_img_path[0], "rb") as img_f:
             b64_img = base64.b64encode(img_f.read()).decode("utf-8")
-        header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ ЗВІТ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL REPORT"
+        header_txt = "PIGSTRESS AI PRO - ОФІЦІЙНИЙ АКТ ФОТОФІКСАЦІЇ" if current_lang[0] == "uk" else "PIGSTRESS AI PRO - OFFICIAL PHOTO FIXATION REPORT"
         
-        # Отримуємо значення підприємств для звіту
         sender_text = tf_sender.value if tf_sender.value else LANG[current_lang[0]]["not_specified"]
         receiver_text = tf_receiver.value if tf_receiver.value else LANG[current_lang[0]]["not_specified"]
+        address_text = tf_address.value if tf_address.value else LANG[current_lang[0]]["not_specified"]
+
+        # Формування юридичного блоку підпису та дисклеймера залежно від мови
+        if current_lang[0] == "uk":
+            legal_footer = """
+            <div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">
+                <h3 style="color: #0d47a1;">📝 ЗАУВАЖЕННЯ ТА ОЦІНКА ВЕТЕРИНАРНОГО ЛІКАРЯ (ЗАПОВНЮЄТЬСЯ ВРУЧНУ)</h3>
+                <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+                <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+                <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+                <br>
+                <table style="width: 100%; border: none; margin-top: 20px;">
+                    <tr style="border: none; background: none;">
+                        <td style="border: none; width: 50%; font-size: 16px;"><strong>Ветеринарний лікар:</strong> ______________________</td>
+                        <td style="border: none; width: 50%; text-align: right; font-size: 16px;"><strong>Підпис / Штамп:</strong> ______________________</td>
+                    </tr>
+                </table>
+            </div>
+            <div style="margin-top: 40px; font-size: 12px; color: #666; text-align: justify; border-top: 1px dashed #ccc; padding-top: 15px; line-height: 1.4;">
+                <strong>ЮРИДИЧНА ДОВІДКА:</strong> Даний акт сформовано за допомогою штучного інтелекту Gemini 2.5 (корпорація Google) і є засобом об'єктивної цифрової фотофіксації умов перевезення або утримання тварин. Машинний аналіз не є повноцінною заміною професійної ветеринарної експертизи. Остаточне клінічне рішення, встановлення діагнозу та юридична відповідальність за висновки акту покладаються виключно на ветеринарного спеціаліста, який підписує цей документ.
+            </div>
+            """
+        else:
+            legal_footer = """
+            <div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">
+                <h3 style="color: #0d47a1;">📝 VETERINARIAN NOTES & FIELD ASSESSMENT (MANUAL INPUT)</h3>
+                <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+                <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+                <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+                <br>
+                <table style="width: 100%; border: none; margin-top: 20px;">
+                    <tr style="border: none; background: none;">
+                        <td style="border: none; width: 50%; font-size: 16px;"><strong>Veterinary Doctor:</strong> ______________________</td>
+                        <td style="border: none; width: 50%; text-align: right; font-size: 16px;"><strong>Signature / Stamp:</strong> ______________________</td>
+                    </tr>
+                </table>
+            </div>
+            <div style="margin-top: 40px; font-size: 12px; color: #666; text-align: justify; border-top: 1px dashed #ccc; padding-top: 15px; line-height: 1.4;">
+                <strong>LEGAL DISCLAIMER:</strong> This report was generated using Gemini 2.5 Artificial Intelligence (Google Corporation) and serves as an objective digital photo-fixation tool of animal transport or holding conditions. Automated analysis does not constitute a full replacement for professional veterinary expertise. The final clinical decision, diagnosis verification, and legal liability for the findings rest exclusively with the signing veterinary specialist.
+            </div>
+            """
 
         return f"""<!DOCTYPE html>
 <html lang="uk">
@@ -225,7 +364,7 @@ def main(page: ft.Page):
     <style>
         body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; max-width: 800px; margin: auto; color: #333; }}
         h1 {{ text-align: center; color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 10px; }}
-        .header-info {{ background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 16px; border-left: 5px solid #0d47a1; line-height: 1.5; }}
+        .header-info {{ background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 15px; border-left: 5px solid #0d47a1; line-height: 1.6; }}
         .date {{ text-align: right; color: #777; font-style: italic; margin-bottom: 10px; }}
         .photo-container {{ text-align: center; margin: 20px 0; }}
         img {{ max-width: 100%; max-height: 500px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #ddd; }}
@@ -234,11 +373,12 @@ def main(page: ft.Page):
 </head>
 <body>
     <h1>📋 {header_txt}</h1>
-    <div class="date">Дата генерації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+    <div class="date">Точний час фіксації (дата/година): {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
     
     <div class="header-info">
         <strong>{LANG[current_lang[0]]['sender_label']}</strong> {sender_text}<br>
-        <strong>{LANG[current_lang[0]]['receiver_label']}</strong> {receiver_text}
+        <strong>{LANG[current_lang[0]]['receiver_label']}</strong> {receiver_text}<br>
+        <strong>📍 Географічне положення:</strong> {address_text}
     </div>
 
     <div class="photo-container">
@@ -247,6 +387,8 @@ def main(page: ft.Page):
     <div class="report-box">
 {last_report_text[0]}
     </div>
+
+    {legal_footer}
 </body>
 </html>"""
 
@@ -263,12 +405,13 @@ def main(page: ft.Page):
             page.update()
     save_picker.on_result = on_save_result
 
-    # === БЛОК ПІДПРИЄМСТВ ТА КЕШУВАННЯ ===
+    # Налаштування збереження полів підприємств в пам'ять телефону
     last_sender = page.client_storage.get("last_sender") or ""
     last_receiver = page.client_storage.get("last_receiver") or ""
 
     tf_sender = ft.TextField(label=LANG[current_lang[0]]["sender_label"], value=last_sender, width=380, border_color="blue_400")
     tf_receiver = ft.TextField(label=LANG[current_lang[0]]["receiver_label"], value=last_receiver, width=380, border_color="blue_400")
+    tf_address = ft.TextField(label=LANG[current_lang[0]]["address_label"], value="", width=380, border_color="blue_400", multiline=True)
 
     dd_location = ft.Dropdown(
         label=LANG[current_lang[0]]["location_label"],
@@ -284,7 +427,7 @@ def main(page: ft.Page):
     )
     
     cb_legal_audit = ft.Checkbox(label=LANG[current_lang[0]]["legal_check"], value=False, fill_color="blue_900")
-    options_panel = ft.Column([tf_sender, tf_receiver, dd_location, cb_legal_audit], visible=False, spacing=10)
+    options_panel = ft.Column([tf_sender, tf_receiver, tf_address, dd_location, cb_legal_audit], visible=False, spacing=10)
 
     btn_lang = ft.TextButton("🇺🇦 UK", on_click=lambda e: toggle_language())
     def toggle_language():
@@ -296,9 +439,9 @@ def main(page: ft.Page):
         btn_confirm_quality.content.controls[1].value = LANG[current_lang[0]]["confirm"]
         btn_retake_quality.content.controls[1].value = LANG[current_lang[0]]["retake"]
         
-        # Переклад нових полів
         tf_sender.label = LANG[current_lang[0]]["sender_label"]
         tf_receiver.label = LANG[current_lang[0]]["receiver_label"]
+        tf_address.label = LANG[current_lang[0]]["address_label"]
         
         dd_location.label = LANG[current_lang[0]]["location_label"]
         dd_location.options = [
@@ -393,7 +536,7 @@ def main(page: ft.Page):
     def process_analysis():
         current_date = datetime.datetime.now().strftime("%B %Y")
         
-        # ЗБЕРЕЖЕННЯ В КЕШ: запам'ятовуємо введені дані
+        # Фіксуємо заповнені фірми у кеш телефону
         page.client_storage.set("last_sender", tf_sender.value)
         page.client_storage.set("last_receiver", tf_receiver.value)
         
@@ -500,10 +643,9 @@ def main(page: ft.Page):
         dd_location.disabled = False
         cb_legal_audit.disabled = False 
         
-        # Залишаємо поля активними, щоб можна було виправити помилку, якщо лікар одруківся
         tf_sender.disabled = False
         tf_receiver.disabled = False
-        
+        tf_address.disabled = False
         page.update()
 
     def on_analyze(e):
@@ -518,9 +660,9 @@ def main(page: ft.Page):
         dd_location.disabled = True
         cb_legal_audit.disabled = True 
         
-        # Блокуємо поля під час аналізу
         tf_sender.disabled = True
         tf_receiver.disabled = True
+        tf_address.disabled = True
         
         ai_answer.value = ""
         report_container.visible = False
@@ -546,7 +688,7 @@ def main(page: ft.Page):
         report_container.visible = False
         page.update()
 
-    # 🔥 РОЗУМНА КНОПКА ЗБЕРЕЖЕННЯ ДЛЯ ANDROID / WINDOWS
+    # СМАРТ-ЗБЕРЕЖЕННЯ З ВИКЛИКОМ ДІАЛОГОВОГО ВІКНА УСПІХУ ДЛЯ АНДРОЇД
     def on_save_report_click(e):
         if not last_report_text[0] or not current_img_path[0]: return
         
@@ -555,19 +697,20 @@ def main(page: ft.Page):
         
         android_downloads = "/storage/emulated/0/Download"
         if os.path.exists(android_downloads):
-            # Якщо це Android, автоматично кидаємо в Завантаження
             try:
                 html_data = get_html_content()
                 filepath = os.path.join(android_downloads, filename)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(html_data)
-                page.snack_bar = ft.SnackBar(ft.Text(f"✅ Збережено у папку 'Download' (Завантаження)!\nШукайте файл: {filename}"), bgcolor="green")
-                page.snack_bar.open = True
-                page.update()
+                
+                # Замість SnackBar викликаємо велике інформаційне вікно
+                show_saved_dialog(
+                    LANG[current_lang[0]]["report_saved_title"], 
+                    f"{LANG[current_lang[0]]['report_saved_msg']}{filename}"
+                )
             except Exception as ex:
                 pass
         else:
-            # На Windows викликаємо красиве вікно "Зберегти як..."
             save_picker.save_file(
                 file_name=filename,
                 allowed_extensions=["html"]
