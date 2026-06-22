@@ -8,13 +8,12 @@ import base64
 import urllib.request
 import threading
 
-# Безпечний імпорт для роботи з GPS-даними фотографії
+# Безпечний імпорт чистої Python-бібліотеки для EXIF (GPS)
 try:
-    from PIL import Image
-    from PIL.ExifTags import TAGS, GPSTAGS
-    HAS_PIL = True
+    from exif import Image as ExifImage
+    HAS_EXIF = True
 except ImportError:
-    HAS_PIL = False
+    HAS_EXIF = False
 
 # ==========================================
 # CONFIGURATION & AI SYSTEM PROMPT
@@ -201,7 +200,6 @@ def main(page: ft.Page):
     )
     page.overlay.append(dlg_settings)
 
-    # Велике діалогове вікно підтвердження збереження
     dlg_saved = ft.AlertDialog(
         title=ft.Text(""),
         content=ft.Text(""),
@@ -225,9 +223,9 @@ def main(page: ft.Page):
     save_picker = ft.FilePicker()
     page.overlay.append(save_picker)
 
-    # Асинхронна функція зчитування GPS та визначення текстової адреси з карт
+    # Асинхронна функція зчитування GPS через бібліотеку exif
     def extract_gps_async(img_path):
-        if not HAS_PIL:
+        if not HAS_EXIF:
             tf_address.value = LANG[current_lang[0]]["gps_not_found"]
             page.update()
             return
@@ -236,32 +234,21 @@ def main(page: ft.Page):
         page.update()
         
         try:
-            img = Image.open(img_path)
-            exif = img._getexif()
-            if not exif:
-                tf_address.value = LANG[current_lang[0]]["gps_not_found"]
-                page.update()
-                return
+            with open(img_path, "rb") as f:
+                img = ExifImage(f)
                 
-            gps_info = {}
-            for tag, value in exif.items():
-                decoded = TAGS.get(tag, tag)
-                if decoded == "GPSInfo":
-                    for t in value:
-                        sub_decoded = GPSTAGS.get(t, t)
-                        gps_info[sub_decoded] = value[t]
-                        
-            if "GPSLatitude" in gps_info and "GPSLongitude" in gps_info:
-                lat = gps_info["GPSLatitude"]
-                lon = gps_info["GPSLongitude"]
+            if img.has_exif and hasattr(img, 'gps_latitude') and hasattr(img, 'gps_longitude'):
+                lat = img.gps_latitude
+                lon = img.gps_longitude
+                lat_ref = getattr(img, 'gps_latitude_ref', 'N')
+                lon_ref = getattr(img, 'gps_longitude_ref', 'E')
                 
                 lat_deg = float(lat[0]) + float(lat[1])/60.0 + float(lat[2])/3600.0
                 lon_deg = float(lon[0]) + float(lon[1])/60.0 + float(lon[2])/3600.0
                 
-                if gps_info.get("GPSLatitudeRef") == "S": lat_deg = -lat_deg
-                if gps_info.get("GPSLongitudeRef") == "W": lon_deg = -lon_deg
+                if str(lat_ref).upper() == 'S': lat_deg = -lat_deg
+                if str(lon_ref).upper() == 'W': lon_deg = -lon_deg
                 
-                # Використовуємо безкоштовний сервіс OpenStreetMap Nominatim для реверсивного геокодування адреси
                 url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat_deg}&lon={lon_deg}&addressdetails=1"
                 req = urllib.request.Request(url, headers={'User-Agent': 'PigStressAI/1.0'})
                 with urllib.request.urlopen(req, timeout=5) as response:
@@ -301,12 +288,10 @@ def main(page: ft.Page):
             report_container.visible = False
             page.update()
             
-            # Запускаємо фоновий пошук геолокації по фотографії
             threading.Thread(target=extract_gps_async, args=(path,), daemon=True).start()
             
     fp_picker.on_result = on_file_picked
 
-    # ФУНКЦІЯ ГЕНЕРАЦІЇ HTML ЗВІТУ (З ЮРИДИЧНИМ ЗАХИСТОМ ТА ПІДПИСОМ)
     def get_html_content():
         with open(current_img_path[0], "rb") as img_f:
             b64_img = base64.b64encode(img_f.read()).decode("utf-8")
@@ -316,7 +301,6 @@ def main(page: ft.Page):
         receiver_text = tf_receiver.value if tf_receiver.value else LANG[current_lang[0]]["not_specified"]
         address_text = tf_address.value if tf_address.value else LANG[current_lang[0]]["not_specified"]
 
-        # Формування юридичного блоку підпису та дисклеймера залежно від мови
         if current_lang[0] == "uk":
             legal_footer = """
             <div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">
@@ -405,7 +389,6 @@ def main(page: ft.Page):
             page.update()
     save_picker.on_result = on_save_result
 
-    # Налаштування збереження полів підприємств в пам'ять телефону
     last_sender = page.client_storage.get("last_sender") or ""
     last_receiver = page.client_storage.get("last_receiver") or ""
 
@@ -536,7 +519,6 @@ def main(page: ft.Page):
     def process_analysis():
         current_date = datetime.datetime.now().strftime("%B %Y")
         
-        # Фіксуємо заповнені фірми у кеш телефону
         page.client_storage.set("last_sender", tf_sender.value)
         page.client_storage.set("last_receiver", tf_receiver.value)
         
@@ -688,7 +670,6 @@ def main(page: ft.Page):
         report_container.visible = False
         page.update()
 
-    # СМАРТ-ЗБЕРЕЖЕННЯ З ВИКЛИКОМ ДІАЛОГОВОГО ВІКНА УСПІХУ ДЛЯ АНДРОЇД
     def on_save_report_click(e):
         if not last_report_text[0] or not current_img_path[0]: return
         
@@ -703,7 +684,6 @@ def main(page: ft.Page):
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(html_data)
                 
-                # Замість SnackBar викликаємо велике інформаційне вікно
                 show_saved_dialog(
                     LANG[current_lang[0]]["report_saved_title"], 
                     f"{LANG[current_lang[0]]['report_saved_msg']}{filename}"
