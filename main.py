@@ -84,6 +84,24 @@ def main(page: ft.Page):
     # Глобальні змінні для нових модулів
     global_docs_base64 = [None, None, None, None]
     global_individual_reports = []
+    
+    # 🌟 НОВЕ: СТВОРЮЄМО ГЛОБАЛЬНЕ СХОВИЩЕ ДАНИХ (JSON DATA FLOW) 🌟
+    # Закладаємо фундамент для багатокористувацької веб-версії та трихінелоскопії
+    global_ocr_data = {
+        "sender": "",
+        "receiver": "",
+        "animal_type": "",
+        "head_count_vet": "",
+        "head_count_vidomist": "",
+        "cross_check_status": "",
+        "vaccinations": "",
+        "qr_link": "",
+        "trichinella_status": "Не проведено",
+        "verified_doctor": "Експрес-користувач",
+        "company_name": "Поточне підприємство"
+    }
+    # Прикріплюємо його до page, щоб модуль документів міг його легко і безпечно читати/змінювати
+    page.global_ocr_data = global_ocr_data
 
     current_lang = ["uk"]
     current_img_path = [None]
@@ -170,25 +188,70 @@ def main(page: ft.Page):
     def get_html_content():
         with open(current_img_path[0], "rb") as img_f: b64_img = base64.b64encode(img_f.read()).decode("utf-8")
         
-        sender_text = tf_sender.value or "Не вказано"
-        receiver_text = tf_receiver.value or "Не вказано"
+        # 🌟 НОВЕ: ДИНАМІЧНИЙ ПАРСИНГ ДАНИХ (Гнучкий HTML) 🌟
+        # Пріоритет: спочатку беремо дані з розпізнаних документів (якщо є), якщо ні - беремо ручний текст Експрес-вводу
+        sender_text = page.global_ocr_data.get("sender") or tf_sender.value or "Не вказано"
+        receiver_text = page.global_ocr_data.get("receiver") or tf_receiver.value or "Не вказано"
         address_text = tf_address.value or "Не вказано"
+
+        # Блок OCR Верифікації (з'явиться тільки якщо документи були проскановані)
+        ocr_html_block = ""
+        if page.global_ocr_data.get("cross_check_status"):
+            qr_html = f"<p><strong>🔗 Електронне свідоцтво (QR):</strong> <a href='{page.global_ocr_data.get('qr_link')}'>Відкрити в реєстрі</a></p>" if page.global_ocr_data.get('qr_link') else ""
+            
+            ocr_html_block = f"""
+            <div style="margin-top: 20px; background: #f0fdf4; border-left: 5px solid #22c55e; padding: 15px; border-radius: 6px;">
+                <h3 style="color: #166534; margin-top: 0; margin-bottom: 10px;">🟢 ВЕРИФІКАЦІЯ ДОКУМЕНТІВ (OCR ШІ)</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
+                    <div><strong>Вид тварин:</strong> {page.global_ocr_data.get("animal_type", "Не вказано")}</div>
+                    <div><strong>Кількість (Вет-Свідоцтво):</strong> {page.global_ocr_data.get("head_count_vet", "Не вказано")}</div>
+                    <div><strong>Щеплення:</strong> {page.global_ocr_data.get("vaccinations", "Не вказано")}</div>
+                    <div><strong>Кількість (Відомість):</strong> {page.global_ocr_data.get("head_count_vidomist", "Не вказано")}</div>
+                </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bbf7d0;">
+                    <strong>Статус звірки:</strong> {page.global_ocr_data.get("cross_check_status", "")}
+                </div>
+                <div style="margin-top: 10px; font-size: 14px;">
+                    <strong>🔬 Трихінелоскопія:</strong> {page.global_ocr_data.get("trichinella_status", "Не проведено")} 
+                    <span style="color: #666;">(Лікар: {page.global_ocr_data.get("verified_doctor", "")})</span>
+                </div>
+                {qr_html}
+            </div>
+            """
 
         sanitation_memo = ""
         if dd_location.value == "transport":
-            sanitation_memo = """<div style="margin-top: 25px; background: #fff3e0; padding: 15px; border-left: 5px solid #ff9800; border-radius: 6px;"><strong>🧽 РЕГЛАМЕНТ БІОБЕЗПЕКИ ТРАНСПОРТУ:</strong><br>Після відвантаження обов'язкове миття кузова та дезінфекція перед наступним рейсом.</div>"""
+            sanitation_memo = """
+            <div style="margin-top: 25px; background: #fff3e0; padding: 15px; border-left: 5px solid #ff9800; border-radius: 6px;">
+                <strong>🧽 РЕГЛАМЕНТ БІОБЕЗПЕКИ ТРАНСПОРТУ (ОБОВ'ЯЗКОВО ДО ВИКОНАННЯ):</strong><br>
+                Негайно після відвантаження тварин з кузова автомобіля персонал зобов'язаний провести повне миття кузова під високим тиском, механічне прибирання залишків підстилки/гною та виконати фінальну дезінфекцію сертифікованими розчинами перед наступним рейсом.
+            </div>"""
         elif dd_location.value == "slaughter":
-            sanitation_memo = """<div style="margin-top: 25px; background: #e8f5e9; padding: 15px; border-left: 5px solid #4caf50; border-radius: 6px;"><strong>🏛️ НОРМАТИВИ ГУМАННОГО ЗАБОЮ:</strong><br>* 12 годин відпочинку та водопій (Закон №3447-IV).<br>* Ізоляція від інших при оглушенні. Перевірений електрошокер.<br>* Негайне знекровлення для запобігання гемоаспірації.</div>"""
+            sanitation_memo = """
+            <div style="margin-top: 25px; background: #e8f5e9; padding: 15px; border-left: 5px solid #4caf50; border-radius: 6px; line-height: 1.5;">
+                <strong>🏛️ ТЕХНОЛОГІЧНІ ВИМОГИ ТА НОРМАТИВИ ГУМАННОГО ЗАБОЮ:</strong><br>
+                * <strong>Режим відпочинку:</strong> Тваринам перед забоєм обов'язково забезпечується сумарно не менше 12 годин відпочинку в загонах передзабійного утримання з постійним, безперешкодним доступом до питної води <i>(Закон №3447-IV / Наказ №28)</i>.<br>
+                * <strong>Ізоляція та оглушення:</strong> Тварина перед оглушенням відводиться в індивідуальний бокс так, щоб інші тварини не бачили процесу. Обладнання (електрошокер) має бути перевірено на справність згідно з Журналом обліку, персонал навчений <i>(Регламент ЄС № 1099/2009)</i>.<br>
+                * <strong>Знекровлення:</strong> Проводиться негайно після оглушення шляхом пересікання магістральних судин для швидкого витікання крові в підвішеному стані. Це унеможливлює гемоаспірацію (потрапляння крові в легені) та запобігає вибраковці туші.<br>
+                * <strong>Санітарія цеху:</strong> Після звільнення загону та відведення тварин обов'язково проводиться ретельне миття, дезінфекція та поточне прибирання загону перед прийомом наступної партії.
+            </div>"""
 
         legal_footer = f"""
         {sanitation_memo}
         <div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">
-            <h3 style="color: #0d47a1;">📝 ЗАУВАЖЕННЯ ВЕТЕРИНАРНОГО ЛІКАРЯ</h3>
-            <p style="border-bottom: 1px solid #ccc; height: 30px;"></p><p style="border-bottom: 1px solid #ccc; height: 30px;"></p>
-            <table style="width: 100%; border: none; margin-top: 20px;"><tr style="border: none; background: none;">
-                <td style="border: none; width: 50%; font-size: 16px;"><strong>Ветеринарний лікар:</strong> ________________</td>
-                <td style="border: none; width: 50%; text-align: right; font-size: 16px;"><strong>Підпис/Штамп:</strong> ________________</td>
-            </tr></table>
+            <h3 style="color: #0d47a1;">📝 ЗАУВАЖЕННЯ ТА ВЛАСНА ОЦІНКА ВЕТЕРИНАРНОГО ЛІКАРЯ (ЗАПОВНЮЄТЬСЯ ВРУЧНУ)</h3>
+            <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+            <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
+            <br>
+            <table style="width: 100%; border: none; margin-top: 20px;">
+                <tr style="border: none; background: none;">
+                    <td style="border: none; width: 50%; font-size: 16px;"><strong>Ветеринарний лікар (ПІБ):</strong> ______________________</td>
+                    <td style="border: none; width: 50%; text-align: right; font-size: 16px;"><strong>Підпис / Штамп:</strong> ______________________</td>
+                </tr>
+            </table>
+        </div>
+        <div style="margin-top: 40px; font-size: 12px; color: #666; text-align: justify; border-top: 1px dashed #ccc; padding-top: 15px; line-height: 1.4;">
+            <strong>ЮРИДИЧНА ДОВІДКА:</strong> Даний акт сформовано за допомогою штучного інтелекту Gemini 2.5 (модель Google) із жорстким температурним коефіцієнтом (0.0) для забезпечення об'єктивності цифрової фотофіксації. Машинний аналіз є виключно допоміжним інструментом оцінки умов. Остаточне клінічне рішення, верифікація та правова відповідальність за висновки акту покладаються виключно на ветеринарного спеціаліста, який підписує цей документ.
         </div>
         """
 
@@ -210,8 +273,9 @@ def main(page: ft.Page):
         img {{ max-width: 100%; border-radius: 10px; border: 1px solid #ddd; }} .box {{ background: #f8f9fa; padding: 25px; border-radius: 10px; border: 1px solid #e0e0e0; white-space: pre-wrap; }}
         </style></head><body>
         <h1>📋 PIGSTRESS AI - АКТ ПРИЙМАННЯ ТА АУДИТУ</h1>
-        <div style="text-align: right; color: #777;">{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+        <div style="text-align: right; color: #777;">Точний час фіксації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
         <div class="info"><strong>Відправник:</strong> {sender_text}<br><strong>Отримувач:</strong> {receiver_text}<br><strong>Локація:</strong> {address_text}</div>
+        {ocr_html_block}
         <div style="text-align: center; margin: 20px 0;"><img src="data:image/jpeg;base64,{b64_img}" /></div>
         <div class="box">{last_report_text[0]}</div>
         {legal_footer}
@@ -313,17 +377,14 @@ def main(page: ft.Page):
     # НАВІГАЦІЯ ТА ЗБІРКА ЕКРАНІВ
     # ==========================================
     
-    # 1. Екран Експрес-Група
     express_view = ft.Column([
         img_placeholder, img_preview, options_panel,
         ft.Row([btn_pick, btn_analyze, btn_save], alignment=ft.MainAxisAlignment.SPACE_EVENLY),
         risk_circle, report_container
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
 
-    # Контейнер, в який ми будемо підвантажувати різні екрани
     main_content = ft.Container(content=express_view)
 
-    # Функції перемикання екранів
     def show_express(e=None):
         main_content.content = express_view
         page.update()
@@ -336,13 +397,11 @@ def main(page: ft.Page):
         main_content.content = ind_anf.get_individual_analyzer_view(page, show_express, global_individual_reports)
         page.update()
 
-    # Верхня панель (Заголовок + Налаштування)
     top_bar = ft.Row([
         ft.Text(APP_TITLE, size=22, weight="bold", color="blue_900"),
         ft.IconButton(icon=ft.Icons.SETTINGS, on_click=lambda e: (setattr(dlg_settings, 'open', True), page.update()))
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-    # Панель вкладок (Режими)
     nav_tabs = ft.Row([
         ft.ElevatedButton("🚚 Група", icon=ft.Icons.GROUPS, on_click=show_express, bgcolor="blue_50", color="blue_900"),
         ft.ElevatedButton("📄 Папери", icon=ft.Icons.DOCUMENT_SCANNER, on_click=show_docs, bgcolor="blue_50", color="blue_900"),
