@@ -5,18 +5,30 @@ import base64
 import threading
 import os
 
-DOC_SYSTEM_PROMPT = """You are an elite expert veterinary auditor. Your task is to perform an advanced cross-check OCR on swine transit documents.
+# 🌟 НОВИЙ ПРОМПТ ДЛЯ ШІ: ВИМАГАЄМО JSON ЗАМІСТЬ ТЕКСТУ 🌟
+DOC_SYSTEM_PROMPT = """You are an elite expert veterinary auditor performing an advanced cross-check OCR on swine transit documents.
 Analyze the provided batch of documents (Vet Certificate Part 1, Vet Certificate Part 2, Movement Sheet, Food Chain Info).
 
 CRITICAL CROSS-CHECK RULES:
-1. Extract the 'Номер відомості' and 'Реєстраційний номер господарства' from the Movement Sheet (Відомість переміщення).
-2. Find where the 'Номер відомості' is written inside the Veterinary Certificate (Ветеринарне свідоцтво).
-3. COMPARE THEM: Explicitly state if the document numbers MATCH or if there is a MISMATCH.
-4. Extract ALL Identification Numbers (ТАТУ/БИРКИ) from the special remarks ('Особливі відмітки') of the Veterinary Certificate.
-5. Food Chain Information (Харчовий ланцюг): If present, mark as 'В наявності'. If the 4th image is missing, mark as clear dash '—'.
-6. QR Code: Locate and extract the digital URL link from the Vet Certificate's QR code if visible.
+1. Extract sender (Відправник / ФОП / Господарство) and receiver (Отримувач).
+2. Extract animal type (Вид тварин, e.g., свині, ВРХ).
+3. Extract total head count (кількість голів) from Vet Certificate and Movement Sheet.
+4. Compare the document numbers ('Номер відомості') between Vet Certificate and Movement Sheet. Explicitly state if they MATCH (Збігається) or MISMATCH (Помилка / Не збігається).
+5. Extract all vaccinations, special remarks, and ID numbers (бирки).
+6. Locate and extract the digital URL link from the Vet Certificate's QR code.
 
-Present the consolidated audit strictly in a clean Markdown table format with a dedicated section for '⚖️ ВЕТЕРИНАРНА ВЕРИФІКАЦІЯ ДОКУМЕНТІВ'."""
+YOU MUST OUTPUT STRICTLY IN VALID JSON FORMAT. NO MARKDOWN, NO EXTRA TEXT.
+Use this exact JSON schema:
+{
+  "sender": "string",
+  "receiver": "string",
+  "animal_type": "string",
+  "head_count_vet": "string",
+  "head_count_vidomist": "string",
+  "cross_check_status": "string",
+  "vaccinations": "string",
+  "qr_link": "string"
+}"""
 
 def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64):
     def get_api_key():
@@ -34,12 +46,12 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
         "Інформація про харчовий ланцюг (за наявності)"
     ]
 
-    lbl_title = ft.Text("🔍 ПЕРЕХРЕСНИЙ АУДИТ ДОКУМЕНТІВ (QR & OCR)", size=18, weight="bold", color="blue_900")
+    lbl_title = ft.Text("🔍 ПЕРЕХРЕСНИЙ АУДИТ ДОКУМЕНТІВ (JSON ПАРСИНГ)", size=18, weight="bold", color="blue_900")
     txt_status = ft.Text("Завантажте документи для автоматичної верифікації номерів:", color="grey_800")
     progress_bar = ft.ProgressBar(width=380, visible=False)
     
     md_output = ft.Markdown(selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED)
-    res_container = ft.Container(content=md_output, padding=15, bgcolor="#F5F5F5", border_radius=10, height=280, visible=False)
+    res_container = ft.Container(content=md_output, padding=15, bgcolor="#e8f5e9", border_radius=10, height=320, visible=False, border=ft.border.all(2, "#4caf50"))
 
     status_icons = [ft.Icon(ft.Icons.RADIO_BUTTON_UNCHECKED, color="grey") for _ in range(4)]
     
@@ -57,7 +69,6 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
                 except:
                     pass
                 
-                # Дозволяємо сканувати, якщо є перші 3 критичні документи, харчовий ланцюг - опціонально
                 if doc_paths[0] and doc_paths[1] and doc_paths[2]:
                     btn_scan.visible = True
                     txt_status.value = "👍 Основні документи готові до перехресної верифікації!"
@@ -86,21 +97,25 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
 
         progress_bar.visible = True
         btn_scan.disabled = True
-        txt_status.value = "🤖 Робот проводить звірку номерів відомостей та зчитує QR-код..."
+        txt_status.value = "🤖 ШІ аналізує документи та витягує JSON-дані..."
         page.update()
 
         def run():
             try:
-                parts_payload = [{"text": "Проведи повний перехресний аудит пакету документів. Порівняй номери відомості у свідоцтві та відомості переміщення. Зчитай бирки з особливих відміток. Відповідь надай українською мовою."}]
+                parts_payload = [{"text": "Проведи повний перехресний аудит пакету документів. Порівняй номери відомості у свідоцтві та відомості переміщення. Відповідь надай СУВОРО у форматі JSON українською мовою."}]
                 for b64 in global_docs_base64:
                     if b64:
                         parts_payload.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
                 
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                # 🌟 ДОДАНО response_mime_type для гарантованого отримання JSON 🌟
                 payload = {
                     "system_instruction": {"parts": [{"text": DOC_SYSTEM_PROMPT}]},
                     "contents": [{"parts": parts_payload}],
-                    "generationConfig": {"temperature": 0.0}
+                    "generationConfig": {
+                        "temperature": 0.0,
+                        "response_mime_type": "application/json"
+                    }
                 }
                 
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
@@ -108,9 +123,29 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
                     res_data = json.loads(response.read().decode('utf-8'))
                     response_text = res_data['candidates'][0]['content']['parts'][0]['text']
                 
-                md_output.value = response_text
+                # 🌟 ПАРСИНГ JSON ТА ЗАПИС У ГЛОБАЛЬНУ ПАМ'ЯТЬ 🌟
+                try:
+                    clean_text = response_text.replace('```json', '').replace('```', '').strip()
+                    parsed_data = json.loads(clean_text)
+                    
+                    # Оновлюємо глобальне сховище в пам'яті телефону
+                    if hasattr(page, 'global_ocr_data'):
+                        page.global_ocr_data.update(parsed_data)
+                    
+                    # Малюємо гарний підсумок на екрані документів
+                    summary = "### 🟢 Дані успішно розпізнано та збережено!\n\n"
+                    summary += f"- **Відправник:** {parsed_data.get('sender', '—')}\n"
+                    summary += f"- **Отримувач:** {parsed_data.get('receiver', '—')}\n"
+                    summary += f"- **Вид:** {parsed_data.get('animal_type', '—')} | **Вет-свідоцтво:** {parsed_data.get('head_count_vet', '—')} гол. | **Відомість:** {parsed_data.get('head_count_vidomist', '—')} гол.\n"
+                    summary += f"- **Статус звірки:** {parsed_data.get('cross_check_status', '—')}\n"
+                    
+                    md_output.value = summary
+                    txt_status.value = "✅ Дані передано в головний Акт!"
+                except Exception as parse_ex:
+                    md_output.value = f"❌ Помилка розбору JSON: {parse_ex}\n\nСира відповідь:\n{response_text}"
+                    txt_status.value = "⚠️ Дані розпізнано з помилкою формату."
+
                 res_container.visible = True
-                txt_status.value = "✅ Перехресна верифікація документів завершена успішно!"
             except Exception as ex:
                 txt_status.value = f"❌ Помилка звірки документів: {ex}"
             
