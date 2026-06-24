@@ -5,17 +5,17 @@ import base64
 import threading
 import os
 
-# 🌟 НОВИЙ ПРОМПТ ДЛЯ ШІ: ВИМАГАЄМО JSON ЗАМІСТЬ ТЕКСТУ 🌟
-DOC_SYSTEM_PROMPT = """You are an elite expert veterinary auditor performing an advanced cross-check OCR on swine transit documents.
-Analyze the provided batch of documents (Vet Certificate Part 1, Vet Certificate Part 2, Movement Sheet, Food Chain Info).
+# 🌟 ОНОВЛЕНИЙ ПРОМПТ: БЕЗ ЗВІРКИ, ЛЕГКИЙ ПАРСИНГ 🌟
+DOC_SYSTEM_PROMPT = """You are an expert veterinary data extractor reading swine transit documents.
+Due to poor print quality (carbon copies, pencil), DO NOT cross-verify or compare documents. Just extract what is clearly visible.
 
-CRITICAL CROSS-CHECK RULES:
-1. Extract sender (Відправник / ФОП / Господарство) and receiver (Отримувач).
-2. Extract animal type (Вид тварин, e.g., свині, ВРХ).
-3. Extract total head count (кількість голів) from Vet Certificate and Movement Sheet.
-4. Compare the document numbers ('Номер відомості') between Vet Certificate and Movement Sheet. Explicitly state if they MATCH (Збігається) or MISMATCH (Помилка / Не збігається).
-5. Extract all vaccinations, special remarks, and ID numbers (бирки).
-6. Locate and extract the digital URL link from the Vet Certificate's QR code.
+EXTRACTION RULES:
+1. "sender": Extract the sender (Відправник / ФОП / Господарство).
+2. "receiver": Extract the receiver (Отримувач). Look specifically in the section "вантаж направляється" (cargo is directed to) or similar.
+3. "animal_type": Extract animal type (Вид тварин, e.g., свині).
+4. "head_count": Extract total head count (кількість голів) from the Veterinary Certificate.
+5. "vaccinations": Extract all vaccinations, special remarks, and ID numbers (бирки).
+6. "qr_link": Locate and extract the digital URL link from the Vet Certificate's QR code if present.
 
 YOU MUST OUTPUT STRICTLY IN VALID JSON FORMAT. NO MARKDOWN, NO EXTRA TEXT.
 Use this exact JSON schema:
@@ -23,9 +23,7 @@ Use this exact JSON schema:
   "sender": "string",
   "receiver": "string",
   "animal_type": "string",
-  "head_count_vet": "string",
-  "head_count_vidomist": "string",
-  "cross_check_status": "string",
+  "head_count": "string",
   "vaccinations": "string",
   "qr_link": "string"
 }"""
@@ -46,8 +44,8 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
         "Інформація про харчовий ланцюг (за наявності)"
     ]
 
-    lbl_title = ft.Text("🔍 ПЕРЕХРЕСНИЙ АУДИТ ДОКУМЕНТІВ (JSON ПАРСИНГ)", size=18, weight="bold", color="blue_900")
-    txt_status = ft.Text("Завантажте документи для автоматичної верифікації номерів:", color="grey_800")
+    lbl_title = ft.Text("🔍 АНАЛІЗ ДОКУМЕНТІВ (ЕКСПРЕС-ЗЧИТУВАННЯ)", size=18, weight="bold", color="blue_900")
+    txt_status = ft.Text("Завантажте документи для автоматичного зчитування:", color="grey_800")
     progress_bar = ft.ProgressBar(width=380, visible=False)
     
     md_output = ft.Markdown(selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED)
@@ -69,9 +67,9 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
                 except:
                     pass
                 
-                if doc_paths[0] and doc_paths[1] and doc_paths[2]:
+                if doc_paths[0]:
                     btn_scan.visible = True
-                    txt_status.value = "👍 Основні документи готові до перехресної верифікації!"
+                    txt_status.value = "👍 Документи готові до зчитування!"
                 page.update()
         return handler
 
@@ -97,18 +95,17 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
 
         progress_bar.visible = True
         btn_scan.disabled = True
-        txt_status.value = "🤖 ШІ аналізує документи та витягує JSON-дані..."
+        txt_status.value = "🤖 ШІ читає документи (Отримувач, QR, Голови)..."
         page.update()
 
         def run():
             try:
-                parts_payload = [{"text": "Проведи повний перехресний аудит пакету документів. Порівняй номери відомості у свідоцтві та відомості переміщення. Відповідь надай СУВОРО у форматі JSON українською мовою."}]
+                parts_payload = [{"text": "Прочитай пакет документів. Знайди отримувача в графі 'вантаж направляється', зчитай кількість голів, QR-код та щеплення. Не роби жодних порівнянь, просто витягни дані. Відповідь СУВОРО у форматі JSON."}]
                 for b64 in global_docs_base64:
                     if b64:
                         parts_payload.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
                 
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                # 🌟 ДОДАНО response_mime_type для гарантованого отримання JSON 🌟
                 payload = {
                     "system_instruction": {"parts": [{"text": DOC_SYSTEM_PROMPT}]},
                     "contents": [{"parts": parts_payload}],
@@ -123,31 +120,31 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
                     res_data = json.loads(response.read().decode('utf-8'))
                     response_text = res_data['candidates'][0]['content']['parts'][0]['text']
                 
-                # 🌟 ПАРСИНГ JSON ТА ЗАПИС У ГЛОБАЛЬНУ ПАМ'ЯТЬ 🌟
                 try:
                     clean_text = response_text.replace('```json', '').replace('```', '').strip()
                     parsed_data = json.loads(clean_text)
                     
-                    # Оновлюємо глобальне сховище в пам'яті телефону
                     if hasattr(page, 'global_ocr_data'):
                         page.global_ocr_data.update(parsed_data)
                     
-                    # Малюємо гарний підсумок на екрані документів
-                    summary = "### 🟢 Дані успішно розпізнано та збережено!\n\n"
+                    summary = "### 🟢 Дані успішно зчитано!\n\n"
                     summary += f"- **Відправник:** {parsed_data.get('sender', '—')}\n"
                     summary += f"- **Отримувач:** {parsed_data.get('receiver', '—')}\n"
-                    summary += f"- **Вид:** {parsed_data.get('animal_type', '—')} | **Вет-свідоцтво:** {parsed_data.get('head_count_vet', '—')} гол. | **Відомість:** {parsed_data.get('head_count_vidomist', '—')} гол.\n"
-                    summary += f"- **Статус звірки:** {parsed_data.get('cross_check_status', '—')}\n"
+                    summary += f"- **Вид:** {parsed_data.get('animal_type', '—')} | **Кількість:** {parsed_data.get('head_count', '—')} гол.\n"
+                    if parsed_data.get('qr_link') and parsed_data.get('qr_link') != "—":
+                        summary += f"- **QR-код:** Знайдено (посилання в Акті)\n"
+                    else:
+                        summary += f"- **QR-код:** Не виявлено\n"
                     
                     md_output.value = summary
-                    txt_status.value = "✅ Дані передано в головний Акт!"
+                    txt_status.value = "✅ Дані готові. Поверніться на головний екран!"
                 except Exception as parse_ex:
-                    md_output.value = f"❌ Помилка розбору JSON: {parse_ex}\n\nСира відповідь:\n{response_text}"
+                    md_output.value = f"❌ Помилка розбору: {parse_ex}\n\nСира відповідь:\n{response_text}"
                     txt_status.value = "⚠️ Дані розпізнано з помилкою формату."
 
                 res_container.visible = True
             except Exception as ex:
-                txt_status.value = f"❌ Помилка звірки документів: {ex}"
+                txt_status.value = f"❌ Помилка ШІ: {ex}"
             
             progress_bar.visible = False
             btn_scan.disabled = False
@@ -155,7 +152,16 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
 
         threading.Thread(target=run, daemon=True).start()
 
-    btn_scan = ft.ElevatedButton("🔍 Запустити верифікацію та звірку номерів", icon=ft.Icons.FACT_CHECK, visible=False, bgcolor="blue_900", color="white", on_click=start_ocr)
+    # Зробив кнопку помітною (Темно-синя)
+    btn_scan = ft.ElevatedButton(
+        "🔍 Зчитати дані (ФОП, QR, Голови)", 
+        icon=ft.Icons.DOCUMENT_SCANNER, 
+        visible=False, 
+        bgcolor="#0d47a1", 
+        color="white",
+        height=50,
+        on_click=start_ocr
+    )
     btn_back = ft.TextButton("⬅️ Назад до головного екрану", on_click=on_back_click)
 
     view = ft.Column([
