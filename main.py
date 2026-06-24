@@ -8,6 +8,14 @@ import base64
 import urllib.request
 import threading
 
+# Спроба підключити Pillow для стиснення фото (вирішення проблеми 90 МБ)
+try:
+    from PIL import Image as PILImage
+    import io
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
 # Підключаємо наші нові модулі!
 import document_processor as doc_proc
 import individual_analyzer as ind_anf
@@ -28,7 +36,7 @@ SYSTEM_PROMPT = """You are an elite, strictly OBJECTIVE veterinary/legal AI insp
 EVALUATION PARAMETERS:
 1. THERMAL: If thermal/PIP insert exists, analyze it. If NOT, strictly state "Тепловізійна оцінка не проводилась" and do not guess.
 2. HYGIENE: Look for manure, blocked slatted floors, flies, rodents, or broken floor slats.
-3. VISUAL WEIGHT ESTIMATION (NEW): Based on body proportions and environment, estimate the approximate average live weight of the group (e.g., '~110-115 kg').
+3. VISUAL WEIGHT ESTIMATION: Estimate the approximate average live weight of the group (e.g., '~110-115 kg').
 4. BIOLOGICAL MARKERS FOR RISK LEVEL (1 TO 5):
    - [RISK_5] (CRITICAL): Fresh red blood, open wounds, active fighting, unable to stand, severe lameness, necrotic tails.
    - [RISK_4] (HIGH): Severe panic huddling, unnatural posture, open-mouth breathing.
@@ -37,12 +45,8 @@ EVALUATION PARAMETERS:
    - [RISK_1] (NORMAL): Calm resting, normal walking.
 
 SMART-SEASON LOGIC:
-- SUMMER + MIDDAY (11:00 - 16:00): Warn about heat stress, recommend shifting transport hours.
-- AUTUMN/WINTER (COLD): Warn about cold huddling, recommend heating/bedding.
-
-HYGIENE AUTOMATION:
-- Dirty floor/blocked slots -> Recommend mechanical cleaning.
-- Cracks/broken slats -> Recommend replacing floor sections.
+- SUMMER + MIDDAY: Warn about heat stress.
+- AUTUMN/WINTER: Warn about cold stress.
 
 OUTPUT FORMAT:
 Generate the report strictly using the exact Markdown TABLE template provided."""
@@ -59,7 +63,6 @@ REPORT_TEMPLATE_UK = """
 | 🌦️ **Сезонний Ризик** | (Вкажи поточну пору року та час) | (Оцінка температурного навантаження) |
 | ⚖️ **Орієнтовна Вага** | (Напр.: ~110-115 кг) | (Тип: Товарна свиня / Порося) |
 | 📍 **Локація** | {LOCATION_CONTEXT} | - |
-| 👥 **Кількість голів** | (Видима на фото: ~X голів) | - |
 
 ---
 
@@ -70,10 +73,33 @@ REPORT_TEMPLATE_UK = """
 * **Дефекти та Набряки:** (Грижі, кульгавість).
 
 ### ⚖️ ВИСНОВОК ТА РЕКОМЕНДАЦІЇ:
-(Короткий підсумок та фізичні дії: прибрати гній, за наявності тріщин - замінити покриття).
+(Короткий підсумок та фізичні дії).
 """
 
-LANG = {"uk": {"wait": "ОЧІКУВАННЯ", "analyzing": "АНАЛІЗ...", "levels": {"RISK_1": "1: НОРМА", "RISK_2": "2: ТРИВОГА", "RISK_3": "3: ПОМІРНИЙ", "RISK_4": "4: ВИСОКИЙ", "RISK_5": "5: КРИТИЧНО", "UNKNOWN": "ПОМИЛКА"}}}
+def get_compressed_b64(image_path, max_size=(800, 800), quality=70):
+    """Стискає фото перед вбудовуванням в HTML, щоб PDF не важив 90 МБ"""
+    if HAS_PIL and image_path and os.path.exists(image_path):
+        try:
+            img = PILImage.open(image_path)
+            # Виправляємо орієнтацію, якщо фото перевернуте (EXIF)
+            try:
+                from PIL import ImageOps
+                img = ImageOps.exif_transpose(img)
+            except: pass
+            
+            img.thumbnail(max_size)
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=quality)
+            return base64.b64encode(buffer.getvalue()).decode("utf-8")
+        except Exception as e:
+            print(f"Compression error: {e}")
+            pass
+    # Якщо немає Pillow або сталася помилка - віддаємо як є
+    if image_path and os.path.exists(image_path):
+        with open(image_path, "rb") as img_f:
+            return base64.b64encode(img_f.read()).decode("utf-8")
+    return ""
+
 
 def main(page: ft.Page):
     page.title = APP_TITLE
@@ -81,29 +107,23 @@ def main(page: ft.Page):
     page.padding = 20
     page.scroll = ft.ScrollMode.AUTO
 
-    # Глобальні змінні для нових модулів
+    # Глобальні змінні
     global_docs_base64 = [None, None, None, None]
     global_individual_reports = []
     
-    # 🌟 НОВЕ: СТВОРЮЄМО ГЛОБАЛЬНЕ СХОВИЩЕ ДАНИХ (JSON DATA FLOW) 🌟
-    # Закладаємо фундамент для багатокористувацької веб-версії та трихінелоскопії
+    # Глобальне сховище OCR
     global_ocr_data = {
         "sender": "",
         "receiver": "",
         "animal_type": "",
-        "head_count_vet": "",
-        "head_count_vidomist": "",
-        "cross_check_status": "",
+        "head_count": "",
         "vaccinations": "",
         "qr_link": "",
         "trichinella_status": "Не проведено",
-        "verified_doctor": "Експрес-користувач",
-        "company_name": "Поточне підприємство"
+        "verified_doctor": "Експрес-користувач"
     }
-    # Прикріплюємо його до page, щоб модуль документів міг його легко і безпечно читати/змінювати
     page.global_ocr_data = global_ocr_data
 
-    current_lang = ["uk"]
     current_img_path = [None]
     last_report_text = [""]
 
@@ -186,32 +206,29 @@ def main(page: ft.Page):
     fp_picker.on_result = on_file_picked
 
     def get_html_content():
-        with open(current_img_path[0], "rb") as img_f: b64_img = base64.b64encode(img_f.read()).decode("utf-8")
+        # Стискаємо головне фото перед вбудовуванням
+        b64_img = get_compressed_b64(current_img_path[0])
         
-        # 🌟 НОВЕ: ДИНАМІЧНИЙ ПАРСИНГ ДАНИХ (Гнучкий HTML) 🌟
-        # Пріоритет: спочатку беремо дані з розпізнаних документів (якщо є), якщо ні - беремо ручний текст Експрес-вводу
+        # Пріоритет: Дані ШІ з документів -> Ручний ввід -> "Не вказано"
         sender_text = page.global_ocr_data.get("sender") or tf_sender.value or "Не вказано"
         receiver_text = page.global_ocr_data.get("receiver") or tf_receiver.value or "Не вказано"
         address_text = tf_address.value or "Не вказано"
 
-        # Блок OCR Верифікації (з'явиться тільки якщо документи були проскановані)
         ocr_html_block = ""
-        if page.global_ocr_data.get("cross_check_status"):
-            qr_html = f"<p><strong>🔗 Електронне свідоцтво (QR):</strong> <a href='{page.global_ocr_data.get('qr_link')}'>Відкрити в реєстрі</a></p>" if page.global_ocr_data.get('qr_link') else ""
+        # Перевіряємо, чи сканували ми документи (якщо є вид тварин або кількість голів)
+        if page.global_ocr_data.get("animal_type") or page.global_ocr_data.get("head_count"):
+            qr_link = page.global_ocr_data.get('qr_link')
+            qr_html = f"<p style='margin-top: 10px;'><strong>🔗 Електронне свідоцтво (QR):</strong> <a href='{qr_link}'>Відкрити в реєстрі</a></p>" if qr_link and qr_link != "—" else ""
             
             ocr_html_block = f"""
             <div style="margin-top: 20px; background: #f0fdf4; border-left: 5px solid #22c55e; padding: 15px; border-radius: 6px;">
                 <h3 style="color: #166534; margin-top: 0; margin-bottom: 10px;">🟢 ВЕРИФІКАЦІЯ ДОКУМЕНТІВ (OCR ШІ)</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
                     <div><strong>Вид тварин:</strong> {page.global_ocr_data.get("animal_type", "Не вказано")}</div>
-                    <div><strong>Кількість (Вет-Свідоцтво):</strong> {page.global_ocr_data.get("head_count_vet", "Не вказано")}</div>
-                    <div><strong>Щеплення:</strong> {page.global_ocr_data.get("vaccinations", "Не вказано")}</div>
-                    <div><strong>Кількість (Відомість):</strong> {page.global_ocr_data.get("head_count_vidomist", "Не вказано")}</div>
+                    <div><strong>Кількість голів:</strong> {page.global_ocr_data.get("head_count", "Не вказано")}</div>
+                    <div style="grid-column: span 2;"><strong>Відмітки/Щеплення:</strong> {page.global_ocr_data.get("vaccinations", "Не вказано")}</div>
                 </div>
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bbf7d0;">
-                    <strong>Статус звірки:</strong> {page.global_ocr_data.get("cross_check_status", "")}
-                </div>
-                <div style="margin-top: 10px; font-size: 14px;">
+                <div style="margin-top: 10px; font-size: 14px; border-top: 1px solid #bbf7d0; padding-top: 10px;">
                     <strong>🔬 Трихінелоскопія:</strong> {page.global_ocr_data.get("trichinella_status", "Не проведено")} 
                     <span style="color: #666;">(Лікар: {page.global_ocr_data.get("verified_doctor", "")})</span>
                 </div>
@@ -223,48 +240,58 @@ def main(page: ft.Page):
         if dd_location.value == "transport":
             sanitation_memo = """
             <div style="margin-top: 25px; background: #fff3e0; padding: 15px; border-left: 5px solid #ff9800; border-radius: 6px;">
-                <strong>🧽 РЕГЛАМЕНТ БІОБЕЗПЕКИ ТРАНСПОРТУ (ОБОВ'ЯЗКОВО ДО ВИКОНАННЯ):</strong><br>
-                Негайно після відвантаження тварин з кузова автомобіля персонал зобов'язаний провести повне миття кузова під високим тиском, механічне прибирання залишків підстилки/гною та виконати фінальну дезінфекцію сертифікованими розчинами перед наступним рейсом.
+                <strong>🧽 РЕГЛАМЕНТ БІОБЕЗПЕКИ ТРАНСПОРТУ:</strong><br>
+                Негайно після відвантаження тварин з кузова автомобіля персонал зобов'язаний провести повне миття кузова під високим тиском та дезінфекцію перед наступним рейсом.
             </div>"""
         elif dd_location.value == "slaughter":
             sanitation_memo = """
             <div style="margin-top: 25px; background: #e8f5e9; padding: 15px; border-left: 5px solid #4caf50; border-radius: 6px; line-height: 1.5;">
-                <strong>🏛️ ТЕХНОЛОГІЧНІ ВИМОГИ ТА НОРМАТИВИ ГУМАННОГО ЗАБОЮ:</strong><br>
-                * <strong>Режим відпочинку:</strong> Тваринам перед забоєм обов'язково забезпечується сумарно не менше 12 годин відпочинку в загонах передзабійного утримання з постійним, безперешкодним доступом до питної води <i>(Закон №3447-IV / Наказ №28)</i>.<br>
-                * <strong>Ізоляція та оглушення:</strong> Тварина перед оглушенням відводиться в індивідуальний бокс так, щоб інші тварини не бачили процесу. Обладнання (електрошокер) має бути перевірено на справність згідно з Журналом обліку, персонал навчений <i>(Регламент ЄС № 1099/2009)</i>.<br>
-                * <strong>Знекровлення:</strong> Проводиться негайно після оглушення шляхом пересікання магістральних судин для швидкого витікання крові в підвішеному стані. Це унеможливлює гемоаспірацію (потрапляння крові в легені) та запобігає вибраковці туші.<br>
-                * <strong>Санітарія цеху:</strong> Після звільнення загону та відведення тварин обов'язково проводиться ретельне миття, дезінфекція та поточне прибирання загону перед прийомом наступної партії.
+                <strong>🏛️ НОРМАТИВИ ГУМАННОГО ЗАБОЮ:</strong><br>
+                * Не менше 12 годин відпочинку з доступом до води <i>(Закон №3447-IV)</i>.<br>
+                * Ізоляція перед оглушенням.<br>
+                * Негайне знекровлення для запобігання гемоаспірації.
             </div>"""
 
         legal_footer = f"""
         {sanitation_memo}
         <div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">
-            <h3 style="color: #0d47a1;">📝 ЗАУВАЖЕННЯ ТА ВЛАСНА ОЦІНКА ВЕТЕРИНАРНОГО ЛІКАРЯ (ЗАПОВНЮЄТЬСЯ ВРУЧНУ)</h3>
+            <h3 style="color: #0d47a1;">📝 ВЛАСНА ОЦІНКА ВЕТЕРИНАРНОГО ЛІКАРЯ</h3>
             <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
             <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
-            <br>
             <table style="width: 100%; border: none; margin-top: 20px;">
                 <tr style="border: none; background: none;">
-                    <td style="border: none; width: 50%; font-size: 16px;"><strong>Ветеринарний лікар (ПІБ):</strong> ______________________</td>
-                    <td style="border: none; width: 50%; text-align: right; font-size: 16px;"><strong>Підпис / Штамп:</strong> ______________________</td>
+                    <td style="border: none; width: 50%; font-size: 16px;"><strong>Лікар (ПІБ):</strong> ______________________</td>
+                    <td style="border: none; width: 50%; text-align: right; font-size: 16px;"><strong>Підпис:</strong> ______________________</td>
                 </tr>
             </table>
         </div>
-        <div style="margin-top: 40px; font-size: 12px; color: #666; text-align: justify; border-top: 1px dashed #ccc; padding-top: 15px; line-height: 1.4;">
-            <strong>ЮРИДИЧНА ДОВІДКА:</strong> Даний акт сформовано за допомогою штучного інтелекту Gemini 2.5 (модель Google) із жорстким температурним коефіцієнтом (0.0) для забезпечення об'єктивності цифрової фотофіксації. Машинний аналіз є виключно допоміжним інструментом оцінки умов. Остаточне клінічне рішення, верифікація та правова відповідальність за висновки акту покладаються виключно на ветеринарного спеціаліста, який підписує цей документ.
-        </div>
         """
 
-        # Додаємо сторінку з документами (якщо вони були завантажені у Вкладці 2)
+        # Додатки: Індивідуальні фото (також стиснуті!)
+        ind_html = ""
+        if global_individual_reports:
+            ind_html += "<div style='page-break-before: always; margin-top: 50px;'>"
+            ind_html += "<h2 style='color: #b71c1c; border-bottom: 2px solid #b71c1c; padding-bottom: 10px;'>🔬 ДОДАТОК: ІНДИВІДУАЛЬНИЙ ОГЛЯД</h2>"
+            for idx, rep in enumerate(global_individual_reports):
+                ind_html += f"<h4 style='color: #555;'>Об'єкт {idx+1} (Час: {rep['time']})</h4>"
+                ind_html += f"<div class='box' style='border-left: 5px solid #b71c1c;'>{rep['text']}</div>"
+                ind_html += f"<div style='text-align: center; margin-top: 15px;'><img src='data:image/jpeg;base64,{rep['img_b64']}' style='max-height: 400px; border-radius: 8px;'/></div><br>"
+            ind_html += "</div>"
+
+        # Додатки: Документи (СТИКУЄМО РОЗМІР!)
         docs_html = ""
         if any(global_docs_base64):
             docs_html += "<div style='page-break-before: always; margin-top: 50px;'>"
             docs_html += "<h2 style='color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 10px;'>📄 ДОДАТОК: СУПРОВІДНА ДОКУМЕНТАЦІЯ</h2>"
-            doc_names = ["Ветеринарне свідоцтво (QR)", "Ветеринарне свідоцтво (Бирки)", "Відомість переміщення", "Харчовий ланцюг"]
+            doc_names = ["Свідоцтво 1", "Свідоцтво 2", "Відомість", "Харчовий ланцюг"]
+            
+            # Для документів беремо вже стиснуті (якщо ми їх стисли) або стискаємо тут
+            # Оскільки base64 вже лежить у global_docs_base64, ми їх просто виводимо, 
+            # але обмежуємо відображення стилем max-height.
             for idx, b64 in enumerate(global_docs_base64):
                 if b64:
-                    docs_html += f"<h4 style='color: #555; margin-bottom: 5px;'>Додаток {idx+1}: {doc_names[idx]}</h4>"
-                    docs_html += f"<img src='data:image/jpeg;base64,{b64}' style='max-width: 100%; max-height: 900px; border: 1px solid #ccc; margin-bottom: 25px; border-radius: 8px;'><br>"
+                    docs_html += f"<h4 style='color: #555; margin-bottom: 5px;'>{doc_names[idx]}</h4>"
+                    docs_html += f"<img src='data:image/jpeg;base64,{b64}' style='max-width: 100%; max-height: 600px; border: 1px solid #ccc; margin-bottom: 25px; border-radius: 8px;'><br>"
             docs_html += "</div>"
 
         return f"""<!DOCTYPE html><html lang="uk"><head><meta charset="utf-8"><title>Акт Фотофіксації</title>
@@ -272,13 +299,14 @@ def main(page: ft.Page):
         h1 {{ text-align: center; color: #0d47a1; border-bottom: 2px solid #0d47a1; }} .info {{ background: #e3f2fd; padding: 15px; border-left: 5px solid #0d47a1; }}
         img {{ max-width: 100%; border-radius: 10px; border: 1px solid #ddd; }} .box {{ background: #f8f9fa; padding: 25px; border-radius: 10px; border: 1px solid #e0e0e0; white-space: pre-wrap; }}
         </style></head><body>
-        <h1>📋 PIGSTRESS AI - АКТ ПРИЙМАННЯ ТА АУДИТУ</h1>
-        <div style="text-align: right; color: #777;">Точний час фіксації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+        <h1>📋 PIGSTRESS AI - АКТ ПРИЙМАННЯ</h1>
+        <div style="text-align: right; color: #777;">Час фіксації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
         <div class="info"><strong>Відправник:</strong> {sender_text}<br><strong>Отримувач:</strong> {receiver_text}<br><strong>Локація:</strong> {address_text}</div>
         {ocr_html_block}
         <div style="text-align: center; margin: 20px 0;"><img src="data:image/jpeg;base64,{b64_img}" /></div>
         <div class="box">{last_report_text[0]}</div>
         {legal_footer}
+        {ind_html}
         {docs_html}
         </body></html>"""
 
@@ -325,7 +353,7 @@ def main(page: ft.Page):
         if not api_key: risk_text.value = "❌ Помилка ключа"; progress_ring.visible = False; risk_circle.content.controls[0].visible = True; page.update(); return
 
         try:
-            with open(current_img_path[0], "rb") as f: b64_img = base64.b64encode(f.read()).decode("utf-8")
+            b64_img = get_compressed_b64(current_img_path[0])
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
             payload = {"system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]}, "contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": "image/jpeg", "data": b64_img}}]}], "generationConfig": {"temperature": 0.0}}
             
@@ -335,7 +363,6 @@ def main(page: ft.Page):
                 text = res['candidates'][0]['content']['parts'][0]['text']
             last_report_text[0] = text
             
-            # Парсинг ризику
             if "[RISK_1]" in text: risk_circle.bgcolor = "green"; risk_text.value = "1: НОРМА"
             elif "[RISK_2]" in text: risk_circle.bgcolor = "lightgreen"; risk_text.value = "2: ТРИВОГА"
             elif "[RISK_3]" in text: risk_circle.bgcolor = "orange"; risk_text.value = "3: ПОМІРНИЙ"
@@ -373,10 +400,6 @@ def main(page: ft.Page):
     btn_analyze = ft.IconButton(icon=ft.Icons.FINGERPRINT, icon_size=40, icon_color="green_700", visible=False, on_click=on_analyze)
     btn_save = ft.IconButton(icon=ft.Icons.SAVE_ALT, icon_size=40, icon_color="deep_orange_700", visible=False, on_click=on_save_click)
 
-    # ==========================================
-    # НАВІГАЦІЯ ТА ЗБІРКА ЕКРАНІВ
-    # ==========================================
-    
     express_view = ft.Column([
         img_placeholder, img_preview, options_panel,
         ft.Row([btn_pick, btn_analyze, btn_save], alignment=ft.MainAxisAlignment.SPACE_EVENLY),
