@@ -1,1 +1,94 @@
 
+{
+  "heat_stress_lairage": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 1.1 & 1.2",
+    "description_ua": "Порушення умов захисту від екстремальних температур. Тварини піддаються тепловому стресу в зоні утримання.",
+    "description_en": "Violation of protection against extreme temperatures. Animals are exposed to heat stress in the lairage area.",
+    "description_pt": "Violação da proteção contra temperaturas extremas. Os animais estão expostos a estresse térmico na área de espera."
+  },
+  "dirty_conditions_lairage": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 1.1",
+    "description_ua": "Незадовільний санітарно-гігієнічний стан. Підлога покрита брудом та гноєм, відсутня чиста і суха зона для відпочинку.",
+    "description_en": "Unsatisfactory sanitary and hygienic conditions. The floor is covered with dirt and manure, lacking a clean and dry resting area.",
+    "description_pt": "Condições sanitárias e higiénicas insatisfatórias. O chão está coberto de sujidade e estrume, sem uma área de descanso limpa e seca."
+  },
+  "heat_stress_transport": {
+    "regulation": "1/2005",
+    "article": "Annex I, Chapter II, Point 1.1 & Chapter VI",
+    "description_ua": "Неналежне ветиляційне та температурне керування в кузові транспортного засобу під час літнього періоду.",
+    "description_en": "Inadequate ventilation and temperature management inside the transport vehicle during the summer period.",
+    "description_pt": "Gestão inadequada de ventilação e temperatura dentro do veículo de transporte durante o período de verão."
+  },
+  "overcrowding_transport": {
+    "regulation": "1/2005",
+    "article": "Annex I, Chapter VII",
+    "description_ua": "Недостатня площа завантаження в кузові авто. Норма щільності для свиней вагою близько 100 кг перевищена.",
+    "description_en": "Insufficient space allowance inside the vehicle. The density limit for pigs weighing around 100 kg is exceeded.",
+    "description_pt": "Espaço insuficiente dentro do veículo. O limite de densidade para suínos com cerca de 100 kg foi excedido."
+  },
+  "water_deprivation_lairage": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 2.1",
+    "description_ua": "Відсутність безперешкодного доступу до чистої питної води на майданчику утримання.",
+    "description_en": "Lack of unhindered access to clean drinking water in the lairage facilities.",
+    "description_pt": "Falta de acesso desimpedido a água potável limpa nas instalações de espera."
+  },
+  "handling_injury_risks": {
+    "regulation": "1099/2009",
+    "article": "Annex III, Point 1.8 & 1.11",
+    "description_ua": "Виявлено ризики травмування через гострі кути огорож або неналежне поводження при перегоні у передзабійну зону.",
+    "description_en": "Injury risks detected due to sharp enclosure edges or improper handling during movement to the stunning area.",
+    "description_pt": "Riscos de lesão detetados devido a arestas vivas nas instalações ou manuseamento inadequado durante a condução para a área de insensibilização."
+  },
+  "infrastructure_damage_lairage": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 1.1",
+    "description_ua": "Пошкодження інфраструктури (тріщини, відшарування фарби, знос поверхонь). Приміщення та обладнання не підтримуються в належному стані, що створює ризик травмування або унеможливлює якісну дезінфекцію.",
+    "description_en": "Infrastructure damage (cracks, peeling paint, worn surfaces). Facilities and equipment are not maintained in good condition, creating a risk of injury or preventing effective disinfection.",
+    "description_pt": "Danos na infraestrutura (fissuras, tinta descascada, superfícies gastas). As instalações e equipamentos não são mantidos em boas condições, criando risco de ferimentos ou impedindo uma desinfeção eficaz."
+  },
+  "water_equipment_damage": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 2.1",
+    "description_ua": "Пошкодження або несправність обладнання для напування (зламані корита, протікання). Обладнання не забезпечує безпечного доступу до води.",
+    "description_en": "Damage or malfunction of watering equipment (broken troughs, leaks). The equipment does not provide safe access to water.",
+    "description_pt": "Danos ou avaria do equipamento de abeberamento (bebedouros partidos, fugas). O equipamento não proporciona acesso seguro à água."
+  },
+  "transport_maintenance_defects": {
+    "regulation": "1/2005",
+    "article": "Annex I, Chapter II, Point 1.1(a)",
+    "description_ua": "Технічні дефекти транспортного засобу (гострі краї, пошкоджені борти, отвори в підлозі), які загрожують цілісності тварин під час перевезення.",
+    "description_en": "Technical defects of the vehicle (sharp edges, damaged sides, holes in the floor) that threaten the integrity of the animals during transport.",
+    "description_pt": "Defeitos técnicos do veículo (arestas vivas, laterais danificadas, buracos no chão) que ameaçam a integridade dos animais durante o transporte."
+  },
+  "animal_injury_signs": {
+    "regulation": "1099/2009",
+    "article": "Annex III, Point 1.8",
+    "description_ua": "Наявність відкритих ран, подряпин, свіжої крові або слідів бійки на тілі тварин.",
+    "description_en": "Presence of open wounds, scratches, fresh blood, or signs of fighting on the animals' bodies.",
+    "description_pt": "Presença de feridas abertas, arranhões, sangue fresco ou sinais de luta no corpo dos animais."
+  },
+  "pest_presence": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 1.1",
+    "description_ua": "Виявлено присутність шкідників (щурі, скупчення комах), що є прямим порушенням вимог санітарії та біобезпеки.",
+    "description_en": "Presence of pests (rats, insect swarms) detected, which is a direct violation of sanitary and biosecurity requirements.",
+    "description_pt": "Presença de pragas (ratos, enxames de insetos) detetada, o que é uma violação direta dos requisitos sanitários e de biossegurança."
+  },
+  "distress_posture": {
+    "regulation": "1/2005",
+    "article": "Annex I, Chapter I",
+    "description_ua": "Неприродна поза тварин (апатія, нездатність піднятися), що свідчить про фізичне виснаження або гострий стрес.",
+    "description_en": "Unnatural animal posture (apathy, inability to stand), indicating physical exhaustion or acute stress.",
+    "description_pt": "Postura antinatural dos animais (apatia, incapacidade de se levantar), indicando exaustão física ou estresse agudo."
+  },
+  "animal_severe_contamination": {
+    "regulation": "1099/2009",
+    "article": "Annex II, Point 1.1",
+    "description_ua": "Значне забруднення шкірного покриву тварин фекаліями, що свідчить про тривале утримання в антисанітарних умовах.",
+    "description_en": "Significant contamination of the animals' skin with feces, indicating prolonged confinement in unsanitary conditions.",
+    "description_pt": "Contaminação significativa da pele dos animais com fezes, indicando confinamento prolongado em condições insalubres."
+  }
+}
