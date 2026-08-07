@@ -113,7 +113,7 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
 
         threading.Thread(target=run, daemon=True).start()
 
-    btn_pick = ft.ElevatedButton("📸 Фото голови / Зони ураження", icon=ft.Icons.CAMERA, on_click=lambda _: ind_picker.pick_files())
+    btn_pick = ft.ElevatedButton("📸 Фото голови / Зони ураження", icon=ft.Icons.CAMERA, on_click=lambda _: ind_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
     btn_analyze = ft.ElevatedButton("🔬 Провести клінічний аналіз", icon=ft.Icons.ANALYTICS, visible=False, bgcolor="red_900", color="white", on_click=run_clinical_analysis)
     btn_back = ft.TextButton("⬅️ Назад до головного екрану", on_click=on_back_click)
 
