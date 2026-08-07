@@ -396,7 +396,7 @@ def main(page: ft.Page):
             page.overlay.append(dlg); dlg.open = True; page.update()
         else: save_picker.save_file(file_name=fn, allowed_extensions=["html"])
 
-    btn_pick = ft.IconButton(icon=ft.Icons.ADD_A_PHOTO, icon_size=40, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files())
+    btn_pick = ft.IconButton(icon=ft.Icons.ADD_A_PHOTO, icon_size=40, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
     btn_analyze = ft.IconButton(icon=ft.Icons.FINGERPRINT, icon_size=40, icon_color="green_700", visible=False, on_click=on_analyze)
     btn_save = ft.IconButton(icon=ft.Icons.SAVE_ALT, icon_size=40, icon_color="deep_orange_700", visible=False, on_click=on_save_click)
 
