@@ -83,7 +83,7 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
         rows.append(ft.Row([
             status_icons[i],
             ft.Text(doc_labels[i], weight="bold", expand=True),
-            ft.IconButton(ft.Icons.CENTER_FOCUS_STRONG if i==0 else ft.Icons.UPLOAD_FILE, on_click=lambda _, picker=p: picker.pick_files())
+            ft.IconButton(ft.Icons.CENTER_FOCUS_STRONG if i==0 else ft.Icons.UPLOAD_FILE, on_click=lambda _, picker=p: picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
         ], width=380))
 
     def start_ocr(e):
