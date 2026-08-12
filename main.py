@@ -51,6 +51,25 @@ SMART-SEASON LOGIC:
 OUTPUT FORMAT:
 Generate the report strictly using the exact Markdown TABLE template provided."""
 
+def load_regulations():
+    laws_text = "\n\n--- LEGAL KNOWLEDGE BASE (STRICT INSTRUCTIONS: USE ONLY THESE REGULATIONS FOR LEGAL AUDIT, DO NOT INVENT) ---\n"
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, 'frozen', False) else os.path.dirname(sys.executable)
+    reg_dir = os.path.join(base_dir, "regulations")
+    
+    for file_name in ["ua_laws.json", "eu_laws.json"]:
+        path = os.path.join(reg_dir, file_name)
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    laws_text += f"\nSource: {file_name}\n"
+                    laws_text += json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            except Exception as e:
+                print(f"Помилка завантаження {file_name}: {e}")
+    return laws_text
+
+SYSTEM_PROMPT += load_regulations()
+
 REPORT_TEMPLATE_UK = """
 [RISK_X]
 
@@ -345,7 +364,7 @@ def main(page: ft.Page):
         
         legal_instr = ""
         if cb_legal.value:
-            legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. Зв'яжи порушення з Наказом №28, №1530 та Законом №3447-IV."
+            legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. Зв'язуй порушення ВИКЛЮЧНО з нормативною базою, наданою в LEGAL KNOWLEDGE BASE. Вигадувати інші закони заборонено."
             
         prompt = f"Час: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}. Локація: {loc_ctx}. {legal_instr} Напиши звіт українською за шаблоном:\n{REPORT_TEMPLATE_UK.replace('{LOCATION_CONTEXT}', loc_ctx)}"
         
