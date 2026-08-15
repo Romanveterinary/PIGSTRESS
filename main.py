@@ -153,20 +153,39 @@ def main(page: ft.Page):
     dlg_settings = ft.AlertDialog(title=ft.Text("⚙️ Налаштування"), content=ft.Column([ft.Text("API Key:"), tf_settings_key], tight=True), actions=[ft.ElevatedButton("Зберегти", on_click=on_save_settings)])
     page.overlay.append(dlg_settings)
 
-    # Апаратна геолокація Flet
+    gps_status = ft.Text("GPS не визначено", color="red_700", size=13)
+
     def handle_location(e):
         current_telemetry["lat"] = e.latitude
         current_telemetry["lon"] = e.longitude
         current_telemetry["maps_link"] = f"https://www.google.com/maps?q={e.latitude},{e.longitude}"
         current_telemetry["time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        threading.Thread(target=process_analysis).start()
+        gps_status.value = f"✅ Зафіксовано: {e.latitude:.5f}, {e.longitude:.5f}"
+        gps_status.color = "green_700"
+        page.update()
 
     def handle_location_error(e):
         current_telemetry["lat"] = None
         current_telemetry["lon"] = None
         current_telemetry["maps_link"] = None
         current_telemetry["time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        threading.Thread(target=process_analysis).start()
+        gps_status.value = "❌ Помилка: Сигнал відсутній"
+        gps_status.color = "red_700"
+        page.update()
+
+    def on_gps_click(e):
+        gps_status.value = "⏳ Пошук супутників..."
+        gps_status.color = "orange_700"
+        page.update()
+        if geolocator:
+            try:
+                geolocator.get_current_position()
+            except Exception:
+                handle_location_error(None)
+        else:
+            handle_location_error(None)
+
+    btn_gps = ft.ElevatedButton("📍 Отримати GPS", on_click=on_gps_click, bgcolor="blue_50", color="blue_900")
 
     try:
         geolocator = ft.Geolocator(
@@ -214,7 +233,7 @@ def main(page: ft.Page):
         <div style="margin-top: 20px; background: #fffde7; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 6px;">
             <h3 style="color: #f57f17; margin-top: 0; margin-bottom: 10px;">📡 АПАРАТНА ТЕЛЕМЕТРІЯ (ФІКСАЦІЯ)</h3>
             <div style="font-size: 14px; line-height: 1.6;">
-                <strong>🕒 Системний час (момент аналізу):</strong> {telemetry_time}<br>
+                <strong>🕒 Час фіксації локації:</strong> {telemetry_time}<br>
                 <strong>📍 Апаратні GPS Координати:</strong> {telemetry_gps}
             </div>
         </div>
@@ -300,7 +319,14 @@ def main(page: ft.Page):
     tf_receiver = ft.TextField(label="Отримувач", value=page.client_storage.get("last_receiver") or "", width=380)
     dd_location = ft.Dropdown(label="Тип локації", options=[ft.dropdown.Option("slaughter", "Забійний пункт"), ft.dropdown.Option("farm", "Ферма"), ft.dropdown.Option("transport", "Транспорт")], value="slaughter", width=380)
     cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Закони)", value=False)
-    options_panel = ft.Column([tf_sender, tf_receiver, dd_location, cb_legal], visible=False, spacing=10)
+    
+    options_panel = ft.Column([
+        tf_sender, 
+        tf_receiver, 
+        dd_location, 
+        cb_legal,
+        ft.Container(content=ft.Row([btn_gps, gps_status], alignment=ft.MainAxisAlignment.START, spacing=10), margin=ft.margin.only(top=10, bottom=10))
+    ], visible=False, spacing=10)
 
     img_preview = ft.Image(width=380, height=220, fit=ft.ImageFit.CONTAIN, visible=False, border_radius=10)
     img_placeholder = ft.Container(content=ft.Column([ft.Icon(ft.Icons.CAMERA_ALT, size=40, color="grey"), ft.Text("Фото групи тварин...", color="grey")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), width=380, height=220, bgcolor="#EEEEEE", border_radius=10)
@@ -357,17 +383,10 @@ def main(page: ft.Page):
         page.update()
 
     def on_analyze(e):
-        risk_circle.bgcolor = "blue_700"; risk_circle.content.controls[0].visible = False; progress_ring.visible = True; risk_text.value = "GPS/АНАЛІЗ..."
+        risk_circle.bgcolor = "blue_700"; risk_circle.content.controls[0].visible = False; progress_ring.visible = True; risk_text.value = "АНАЛІЗ..."
         btn_pick.disabled = True; btn_analyze.disabled = True; btn_save.visible = False; report_container.visible = False
         page.update()
-        
-        if geolocator:
-            try:
-                geolocator.get_current_position()
-            except Exception:
-                handle_location_error(None)
-        else:
-            handle_location_error(None)
+        threading.Thread(target=process_analysis).start()
 
     def on_save_click(e):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
