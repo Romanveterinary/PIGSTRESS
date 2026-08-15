@@ -32,8 +32,8 @@ jobs:
       - name: Встановлюємо стабільну версію Flet
         run: pip install flet==0.28.3
 
-      - name: МАГІЯ! Збираємо APK файл
-        run: flet build apk --product "PigStress" --org "com.roman.pigstress"
+      - name: МАГІЯ! Збираємо APK файл (з дозволами на GPS)
+        run: flet build apk --product "PigStress" --org "com.roman.pigstress" --permissions location
 
       - name: Зберігаємо готовий додаток
         uses: actions/upload-artifact@v4
