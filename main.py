@@ -8,9 +8,10 @@ import base64
 import urllib.request
 import threading
 
-# Спроба підключити Pillow для стиснення фото (вирішення проблеми 90 МБ)
+# Спроба підключити Pillow для стиснення фото (вирішення проблеми 90 МБ) та зчитування EXIF
 try:
     from PIL import Image as PILImage
+    from PIL.ExifTags import TAGS, GPSTAGS
     import io
     HAS_PIL = True
 except ImportError:
@@ -19,12 +20,6 @@ except ImportError:
 # Підключаємо наші нові модулі!
 import document_processor as doc_proc
 import individual_analyzer as ind_anf
-
-try:
-    from exif import Image as ExifImage
-    HAS_EXIF = True
-except ImportError:
-    HAS_EXIF = False
 
 # ==========================================
 # CONFIGURATION & AI SYSTEM PROMPT
@@ -95,6 +90,24 @@ REPORT_TEMPLATE_UK = """
 (Короткий підсумок та фізичні дії).
 """
 
+def get_decimal_degrees(dms, ref):
+    """Конвертує координати EXIF (градуси, мінути, секунди) у десятковий формат"""
+    try:
+        def to_float(val):
+            if isinstance(val, tuple): return float(val[0]) / float(val[1])
+            return float(val)
+        
+        degrees = to_float(dms[0])
+        minutes = to_float(dms[1])
+        seconds = to_float(dms[2])
+        
+        decimal = degrees + (minutes / 60.0) + (seconds / 3600.0)
+        if ref in ['S', 'W']:
+            decimal = -decimal
+        return decimal
+    except Exception:
+        return None
+
 def get_compressed_b64(image_path, max_size=(800, 800), quality=70):
     """Стискає фото перед вбудовуванням в HTML, щоб PDF не важив 90 МБ"""
     if HAS_PIL and image_path and os.path.exists(image_path):
@@ -142,6 +155,15 @@ def main(page: ft.Page):
         "verified_doctor": "Експрес-користувач"
     }
     page.global_ocr_data = global_ocr_data
+    
+    # Сховище телеметрії (EXIF)
+    current_telemetry = {
+        "time": None, 
+        "lat": None, 
+        "lon": None, 
+        "maps_link": None, 
+        "address": "GPS відсутній"
+    }
 
     current_img_path = [None]
     last_report_text = [""]
@@ -178,31 +200,61 @@ def main(page: ft.Page):
     save_picker = ft.FilePicker()
     page.overlay.extend([fp_picker, save_picker])
 
-    def extract_gps_async(img_path):
-        if not HAS_EXIF:
-            tf_address.value = "GPS відсутній"
+    def extract_telemetry_async(img_path):
+        tf_address.value = "🔍 Аналіз метаданих (EXIF)..."
+        page.update()
+        
+        current_telemetry.update({"time": None, "lat": None, "lon": None, "maps_link": None, "address": "GPS відсутній"})
+        
+        if not HAS_PIL:
+            tf_address.value = "EXIF недоступний (Немає Pillow)"
             page.update()
             return
-        tf_address.value = "🔍 Пошук по GPS..."
-        page.update()
+            
         try:
-            with open(img_path, "rb") as f: img = ExifImage(f)
-            if img.has_exif and hasattr(img, 'gps_latitude') and hasattr(img, 'gps_longitude'):
-                lat, lon = img.gps_latitude, img.gps_longitude
-                lat_deg = float(lat[0]) + float(lat[1])/60.0 + float(lat[2])/3600.0
-                lon_deg = float(lon[0]) + float(lon[1])/60.0 + float(lon[2])/3600.0
-                if str(getattr(img, 'gps_latitude_ref', 'N')).upper() == 'S': lat_deg = -lat_deg
-                if str(getattr(img, 'gps_longitude_ref', 'E')).upper() == 'W': lon_deg = -lon_deg
-                
-                url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat_deg}&lon={lon_deg}&addressdetails=1"
-                req = urllib.request.Request(url, headers={'User-Agent': 'PigStressAI/1.0'})
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    data = json.loads(response.read().decode('utf-8'))
-                    addr = data.get("address", {})
-                    parts = [addr.get(k) for k in ["state", "county", "village", "town", "city"] if k in addr]
-                    tf_address.value = ", ".join(parts) if parts else f"{lat_deg:.4f}, {lon_deg:.4f}"
-            else: tf_address.value = "GPS відсутній"
-        except: tf_address.value = "GPS відсутній"
+            with PILImage.open(img_path) as img:
+                exif_data = img._getexif()
+                if exif_data:
+                    gps_info = {}
+                    for tag_id, value in exif_data.items():
+                        tag_name = TAGS.get(tag_id, tag_id)
+                        if tag_name == "DateTimeOriginal":
+                            current_telemetry["time"] = str(value)
+                        elif tag_name == "GPSInfo":
+                            for key in value.keys():
+                                sub_tag_name = GPSTAGS.get(key, key)
+                                gps_info[sub_tag_name] = value[key]
+                    
+                    if gps_info and all(tag in gps_info for tag in ['GPSLatitude', 'GPSLatitudeRef', 'GPSLongitude', 'GPSLongitudeRef']):
+                        lat = get_decimal_degrees(gps_info['GPSLatitude'], gps_info['GPSLatitudeRef'])
+                        lon = get_decimal_degrees(gps_info['GPSLongitude'], gps_info['GPSLongitudeRef'])
+                        
+                        if lat is not None and lon is not None:
+                            current_telemetry["lat"] = lat
+                            current_telemetry["lon"] = lon
+                            current_telemetry["maps_link"] = f"https://www.google.com/maps?q={lat},{lon}"
+                            current_telemetry["address"] = f"{lat:.6f}, {lon:.6f}"
+                            
+                            # Зворотне геокодування для отримання адреси
+                            try:
+                                url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&addressdetails=1"
+                                req = urllib.request.Request(url, headers={'User-Agent': 'PigStressAI/1.0'})
+                                with urllib.request.urlopen(req, timeout=5) as response:
+                                    data = json.loads(response.read().decode('utf-8'))
+                                    addr = data.get("address", {})
+                                    parts = [addr.get(k) for k in ["state", "county", "village", "town", "city"] if k in addr]
+                                    if parts:
+                                        current_telemetry["address"] = ", ".join(parts)
+                            except Exception:
+                                pass
+        except Exception as e:
+            print(f"Помилка EXIF: {e}")
+            
+        if current_telemetry["address"] != "GPS відсутній":
+            tf_address.value = current_telemetry["address"]
+        else:
+            tf_address.value = "EXIF GPS відсутній"
+            
         page.update()
 
     def on_file_picked(e):
@@ -220,7 +272,8 @@ def main(page: ft.Page):
             options_panel.visible = True
             report_container.visible = False
             page.update()
-            threading.Thread(target=extract_gps_async, args=(path,), daemon=True).start()
+            # Запускаємо нову функцію вилучення телеметрії з EXIF
+            threading.Thread(target=extract_telemetry_async, args=(path,), daemon=True).start()
             
     fp_picker.on_result = on_file_picked
 
@@ -254,6 +307,20 @@ def main(page: ft.Page):
                 {qr_html}
             </div>
             """
+
+        telemetry_time = current_telemetry['time'] if current_telemetry['time'] else "EXIF ВІДСУТНІЙ (можлива фальсифікація!)"
+        telemetry_gps = f"<a href='{current_telemetry['maps_link']}' target='_blank'>🗺️ Відкрити на Google Maps</a> ({current_telemetry['lat']:.6f}, {current_telemetry['lon']:.6f})" if current_telemetry['maps_link'] else "EXIF GPS ВІДСУТНІЙ"
+        
+        telemetry_html_block = f"""
+        <div style="margin-top: 20px; background: #fffde7; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 6px;">
+            <h3 style="color: #f57f17; margin-top: 0; margin-bottom: 10px;">📡 ТЕЛЕМЕТРІЯ ТА ВЕРИФІКАЦІЯ (EXIF)</h3>
+            <div style="font-size: 14px; line-height: 1.6;">
+                <strong>🕒 Час створення фото:</strong> <span style="color: {'#d32f2f' if 'ВІДСУТНІЙ' in telemetry_time else '#333'}; font-weight: {'bold' if 'ВІДСУТНІЙ' in telemetry_time else 'normal'};">{telemetry_time}</span><br>
+                <strong>📍 GPS Координати:</strong> {telemetry_gps}<br>
+                <strong>🏠 Локація:</strong> {address_text}
+            </div>
+        </div>
+        """
 
         sanitation_memo = ""
         if dd_location.value == "transport":
@@ -319,9 +386,10 @@ def main(page: ft.Page):
         img {{ max-width: 100%; border-radius: 10px; border: 1px solid #ddd; }} .box {{ background: #f8f9fa; padding: 25px; border-radius: 10px; border: 1px solid #e0e0e0; white-space: pre-wrap; }}
         </style></head><body>
         <h1>📋 PIGSTRESS AI - АКТ ПРИЙМАННЯ</h1>
-        <div style="text-align: right; color: #777;">Час фіксації: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
-        <div class="info"><strong>Відправник:</strong> {sender_text}<br><strong>Отримувач:</strong> {receiver_text}<br><strong>Локація:</strong> {address_text}</div>
+        <div style="text-align: right; color: #777;">Час аудиту (системний): {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+        <div class="info"><strong>Відправник:</strong> {sender_text}<br><strong>Отримувач:</strong> {receiver_text}</div>
         {ocr_html_block}
+        {telemetry_html_block}
         <div style="text-align: center; margin: 20px 0;"><img src="data:image/jpeg;base64,{b64_img}" /></div>
         <div class="box">{last_report_text[0]}</div>
         {legal_footer}
@@ -341,7 +409,7 @@ def main(page: ft.Page):
     # Елементи форми (Експрес)
     tf_sender = ft.TextField(label="Відправник", value=page.client_storage.get("last_sender") or "", width=380)
     tf_receiver = ft.TextField(label="Отримувач", value=page.client_storage.get("last_receiver") or "", width=380)
-    tf_address = ft.TextField(label="GPS Адреса", width=380, multiline=True)
+    tf_address = ft.TextField(label="Локація (з метаданих)", width=380, multiline=True)
     dd_location = ft.Dropdown(label="Тип локації", options=[ft.dropdown.Option("slaughter", "Забійний пункт"), ft.dropdown.Option("farm", "Ферма"), ft.dropdown.Option("transport", "Транспорт")], value="slaughter", width=380)
     cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Закони)", value=False)
     options_panel = ft.Column([tf_sender, tf_receiver, tf_address, dd_location, cb_legal], visible=False, spacing=10)
@@ -366,7 +434,9 @@ def main(page: ft.Page):
         if cb_legal.value:
             legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. Зв'язуй порушення ВИКЛЮЧНО з нормативною базою, наданою в LEGAL KNOWLEDGE BASE. Вигадувати інші закони заборонено."
             
-        prompt = f"Час: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}. Локація: {loc_ctx}. {legal_instr} Напиши звіт українською за шаблоном:\n{REPORT_TEMPLATE_UK.replace('{LOCATION_CONTEXT}', loc_ctx)}"
+        # Бот аналізує фотографію, опираючись на реальний час з EXIF, якщо він є.
+        photo_time = current_telemetry['time'] if current_telemetry['time'] else f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} (СИСТЕМНИЙ ЧАС - EXIF відсутній, можлива фальсифікація!)"
+        prompt = f"Час створення фото: {photo_time}. Локація: {loc_ctx}. {legal_instr} Напиши звіт українською за шаблоном:\n{REPORT_TEMPLATE_UK.replace('{LOCATION_CONTEXT}', loc_ctx)}"
         
         api_key = get_saved_key()
         if not api_key: risk_text.value = "❌ Помилка ключа"; progress_ring.visible = False; risk_circle.content.controls[0].visible = True; page.update(); return
