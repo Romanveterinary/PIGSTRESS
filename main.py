@@ -113,7 +113,6 @@ def get_compressed_b64(image_path, max_size=(800, 800), quality=70):
     if HAS_PIL and image_path and os.path.exists(image_path):
         try:
             img = PILImage.open(image_path)
-            # Виправляємо орієнтацію, якщо фото перевернуте (EXIF)
             try:
                 from PIL import ImageOps
                 img = ImageOps.exif_transpose(img)
@@ -126,7 +125,6 @@ def get_compressed_b64(image_path, max_size=(800, 800), quality=70):
         except Exception as e:
             print(f"Compression error: {e}")
             pass
-    # Якщо немає Pillow або сталася помилка - віддаємо як є
     if image_path and os.path.exists(image_path):
         with open(image_path, "rb") as img_f:
             return base64.b64encode(img_f.read()).decode("utf-8")
@@ -139,11 +137,9 @@ def main(page: ft.Page):
     page.padding = 20
     page.scroll = ft.ScrollMode.AUTO
 
-    # Глобальні змінні
     global_docs_base64 = [None, None, None, None]
     global_individual_reports = []
     
-    # Глобальне сховище OCR
     global_ocr_data = {
         "sender": "",
         "receiver": "",
@@ -156,13 +152,25 @@ def main(page: ft.Page):
     }
     page.global_ocr_data = global_ocr_data
     
-    # Сховище телеметрії (EXIF)
     current_telemetry = {
         "time": None, 
         "lat": None, 
         "lon": None, 
         "maps_link": None, 
-        "address": "GPS відсутній"
+        "address": "GPS відсутній",
+        "filename": "",
+        "filepath": "",
+        "filesize_mb": 0.0,
+        "width": 0,
+        "height": 0,
+        "megapixels": 0,
+        "make": "",
+        "model": "",
+        "iso": "",
+        "focal_length": "",
+        "exposure_bias": "",
+        "f_number": "",
+        "exposure_time": ""
     }
 
     current_img_path = [None]
@@ -204,7 +212,16 @@ def main(page: ft.Page):
         tf_address.value = "🔍 Аналіз метаданих (EXIF)..."
         page.update()
         
-        current_telemetry.update({"time": None, "lat": None, "lon": None, "maps_link": None, "address": "GPS відсутній"})
+        current_telemetry.update({
+            "time": None, "lat": None, "lon": None, "maps_link": None, "address": "GPS відсутній",
+            "filename": os.path.basename(img_path), "filepath": img_path, "filesize_mb": 0.0,
+            "width": 0, "height": 0, "megapixels": 0, "make": "", "model": "", "iso": "",
+            "focal_length": "", "exposure_bias": "", "f_number": "", "exposure_time": ""
+        })
+        
+        try:
+            current_telemetry["filesize_mb"] = os.path.getsize(img_path) / (1024 * 1024)
+        except: pass
         
         if not HAS_PIL:
             tf_address.value = "EXIF недоступний (Немає Pillow)"
@@ -213,13 +230,46 @@ def main(page: ft.Page):
             
         try:
             with PILImage.open(img_path) as img:
+                w, h = img.size
+                current_telemetry["width"] = w
+                current_telemetry["height"] = h
+                current_telemetry["megapixels"] = round((w * h) / 1000000)
+                
                 exif_data = img._getexif()
                 if exif_data:
                     gps_info = {}
                     for tag_id, value in exif_data.items():
                         tag_name = TAGS.get(tag_id, tag_id)
                         if tag_name == "DateTimeOriginal":
-                            current_telemetry["time"] = str(value)
+                            current_telemetry["time"] = str(value).replace(':', '-', 2)
+                        elif tag_name == "Make":
+                            current_telemetry["make"] = str(value).strip()
+                        elif tag_name == "Model":
+                            current_telemetry["model"] = str(value).strip()
+                        elif tag_name == "ISOSpeedRatings":
+                            current_telemetry["iso"] = str(value)
+                        elif tag_name == "FocalLength":
+                            try:
+                                fl = float(value) if not isinstance(value, tuple) else float(value[0])/float(value[1])
+                                current_telemetry["focal_length"] = f"{int(fl)}мм" if fl.is_integer() else f"{fl:.1f}мм"
+                            except: pass
+                        elif tag_name == "ExposureBiasValue":
+                            try:
+                                eb = float(value) if not isinstance(value, tuple) else float(value[0])/float(value[1])
+                                current_telemetry["exposure_bias"] = f"{eb:g}ev"
+                            except: pass
+                        elif tag_name == "FNumber":
+                            try:
+                                fn = float(value) if not isinstance(value, tuple) else float(value[0])/float(value[1])
+                                current_telemetry["f_number"] = f"F{fn:g}".replace('.', ',')
+                            except: pass
+                        elif tag_name == "ExposureTime":
+                            try:
+                                if isinstance(value, tuple):
+                                    current_telemetry["exposure_time"] = f"{value[0]}/{value[1]} s"
+                                else:
+                                    current_telemetry["exposure_time"] = f"{value} s"
+                            except: pass
                         elif tag_name == "GPSInfo":
                             for key in value.keys():
                                 sub_tag_name = GPSTAGS.get(key, key)
@@ -235,7 +285,6 @@ def main(page: ft.Page):
                             current_telemetry["maps_link"] = f"https://www.google.com/maps?q={lat},{lon}"
                             current_telemetry["address"] = f"{lat:.6f}, {lon:.6f}"
                             
-                            # Зворотне геокодування для отримання адреси
                             try:
                                 url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&addressdetails=1"
                                 req = urllib.request.Request(url, headers={'User-Agent': 'PigStressAI/1.0'})
@@ -272,22 +321,18 @@ def main(page: ft.Page):
             options_panel.visible = True
             report_container.visible = False
             page.update()
-            # Запускаємо нову функцію вилучення телеметрії з EXIF
             threading.Thread(target=extract_telemetry_async, args=(path,), daemon=True).start()
             
     fp_picker.on_result = on_file_picked
 
     def get_html_content():
-        # Стискаємо головне фото перед вбудовуванням
         b64_img = get_compressed_b64(current_img_path[0])
         
-        # Пріоритет: Дані ШІ з документів -> Ручний ввід -> "Не вказано"
         sender_text = page.global_ocr_data.get("sender") or tf_sender.value or "Не вказано"
         receiver_text = page.global_ocr_data.get("receiver") or tf_receiver.value or "Не вказано"
         address_text = tf_address.value or "Не вказано"
 
         ocr_html_block = ""
-        # Перевіряємо, чи сканували ми документи (якщо є вид тварин або кількість голів)
         if page.global_ocr_data.get("animal_type") or page.global_ocr_data.get("head_count"):
             qr_link = page.global_ocr_data.get('qr_link')
             qr_html = f"<p style='margin-top: 10px;'><strong>🔗 Електронне свідоцтво (QR):</strong> <a href='{qr_link}'>Відкрити в реєстрі</a></p>" if qr_link and qr_link != "—" else ""
@@ -309,15 +354,40 @@ def main(page: ft.Page):
             """
 
         telemetry_time = current_telemetry['time'] if current_telemetry['time'] else "EXIF ВІДСУТНІЙ (можлива фальсифікація!)"
-        telemetry_gps = f"<a href='{current_telemetry['maps_link']}' target='_blank'>🗺️ Відкрити на Google Maps</a> ({current_telemetry['lat']:.6f}, {current_telemetry['lon']:.6f})" if current_telemetry['maps_link'] else "EXIF GPS ВІДСУТНІЙ"
+        telemetry_gps = f"<a href='{current_telemetry['maps_link']}' target='_blank'>Відкрити на Google Maps</a> ({current_telemetry['lat']:.6f}, {current_telemetry['lon']:.6f})" if current_telemetry['maps_link'] else "ВІДСУТНІЙ"
         
+        make_model = f"{current_telemetry['make']} {current_telemetry['model']}".strip()
+        if not make_model: make_model = "Невідомий пристрій"
+        
+        file_stats = f"{current_telemetry['filesize_mb']:.2f} МБ | {current_telemetry['width']}x{current_telemetry['height']} | {current_telemetry['megapixels']}MP"
+        
+        cam_stats = []
+        if current_telemetry['iso']: cam_stats.append(f"ISO {current_telemetry['iso']}")
+        if current_telemetry['focal_length']: cam_stats.append(current_telemetry['focal_length'])
+        if current_telemetry['exposure_bias']: cam_stats.append(current_telemetry['exposure_bias'])
+        if current_telemetry['f_number']: cam_stats.append(current_telemetry['f_number'])
+        if current_telemetry['exposure_time']: cam_stats.append(current_telemetry['exposure_time'])
+        cam_stats_str = " | ".join(cam_stats)
+
         telemetry_html_block = f"""
-        <div style="margin-top: 20px; background: #fffde7; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 6px;">
-            <h3 style="color: #f57f17; margin-top: 0; margin-bottom: 10px;">📡 ТЕЛЕМЕТРІЯ ТА ВЕРИФІКАЦІЯ (EXIF)</h3>
-            <div style="font-size: 14px; line-height: 1.6;">
-                <strong>🕒 Час створення фото:</strong> <span style="color: {'#d32f2f' if 'ВІДСУТНІЙ' in telemetry_time else '#333'}; font-weight: {'bold' if 'ВІДСУТНІЙ' in telemetry_time else 'normal'};">{telemetry_time}</span><br>
-                <strong>📍 GPS Координати:</strong> {telemetry_gps}<br>
-                <strong>🏠 Локація:</strong> {address_text}
+        <div style="margin-top: 20px; font-family: sans-serif; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
+            <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">Властивості зображення (EXIF)</h3>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 16px; font-weight: bold; color: {'#d32f2f' if 'ВІДСУТНІЙ' in telemetry_time else '#000'};">{telemetry_time}</div>
+                <div style="font-size: 13px; color: #777;">{current_telemetry['filename']}</div>
+                <div style="font-size: 13px; color: #777; word-break: break-all;">{current_telemetry['filepath']}</div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 15px; font-weight: bold; color: #000;">{make_model}</div>
+                <div style="font-size: 13px; color: #777;">{file_stats}</div>
+                <div style="font-size: 13px; color: #777;">{cam_stats_str}</div>
+            </div>
+            
+            <div>
+                <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">📍 {address_text}</div>
+                <div style="font-size: 13px; color: #1a73e8;">{telemetry_gps}</div>
             </div>
         </div>
         """
@@ -353,7 +423,6 @@ def main(page: ft.Page):
         </div>
         """
 
-        # Додатки: Індивідуальні фото (також стиснуті!)
         ind_html = ""
         if global_individual_reports:
             ind_html += "<div style='page-break-before: always; margin-top: 50px;'>"
@@ -364,16 +433,12 @@ def main(page: ft.Page):
                 ind_html += f"<div style='text-align: center; margin-top: 15px;'><img src='data:image/jpeg;base64,{rep['img_b64']}' style='max-height: 400px; border-radius: 8px;'/></div><br>"
             ind_html += "</div>"
 
-        # Додатки: Документи (СТИКУЄМО РОЗМІР!)
         docs_html = ""
         if any(global_docs_base64):
             docs_html += "<div style='page-break-before: always; margin-top: 50px;'>"
             docs_html += "<h2 style='color: #0d47a1; border-bottom: 2px solid #0d47a1; padding-bottom: 10px;'>📄 ДОДАТОК: СУПРОВІДНА ДОКУМЕНТАЦІЯ</h2>"
             doc_names = ["Свідоцтво 1", "Свідоцтво 2", "Відомість", "Харчовий ланцюг"]
             
-            # Для документів беремо вже стиснуті (якщо ми їх стисли) або стискаємо тут
-            # Оскільки base64 вже лежить у global_docs_base64, ми їх просто виводимо, 
-            # але обмежуємо відображення стилем max-height.
             for idx, b64 in enumerate(global_docs_base64):
                 if b64:
                     docs_html += f"<h4 style='color: #555; margin-bottom: 5px;'>{doc_names[idx]}</h4>"
@@ -406,7 +471,6 @@ def main(page: ft.Page):
             page.update()
     save_picker.on_result = on_save_result
 
-    # Елементи форми (Експрес)
     tf_sender = ft.TextField(label="Відправник", value=page.client_storage.get("last_sender") or "", width=380)
     tf_receiver = ft.TextField(label="Отримувач", value=page.client_storage.get("last_receiver") or "", width=380)
     tf_address = ft.TextField(label="Локація (з метаданих)", width=380, multiline=True)
@@ -414,7 +478,6 @@ def main(page: ft.Page):
     cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Закони)", value=False)
     options_panel = ft.Column([tf_sender, tf_receiver, tf_address, dd_location, cb_legal], visible=False, spacing=10)
 
-    # UI Аналізу
     img_preview = ft.Image(width=380, height=220, fit=ft.ImageFit.CONTAIN, visible=False, border_radius=10)
     img_placeholder = ft.Container(content=ft.Column([ft.Icon(ft.Icons.CAMERA_ALT, size=40, color="grey"), ft.Text("Фото групи тварин...", color="grey")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), width=380, height=220, bgcolor="#EEEEEE", border_radius=10)
     
@@ -434,7 +497,6 @@ def main(page: ft.Page):
         if cb_legal.value:
             legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. Зв'язуй порушення ВИКЛЮЧНО з нормативною базою, наданою в LEGAL KNOWLEDGE BASE. Вигадувати інші закони заборонено."
             
-        # Бот аналізує фотографію, опираючись на реальний час з EXIF, якщо він є.
         photo_time = current_telemetry['time'] if current_telemetry['time'] else f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} (СИСТЕМНИЙ ЧАС - EXIF відсутній, можлива фальсифікація!)"
         prompt = f"Час створення фото: {photo_time}. Локація: {loc_ctx}. {legal_instr} Напиши звіт українською за шаблоном:\n{REPORT_TEMPLATE_UK.replace('{LOCATION_CONTEXT}', loc_ctx)}"
         
