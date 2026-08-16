@@ -6,26 +6,26 @@ import threading
 import os
 import datetime
 
-IND_SYSTEM_PROMPT = """You are an expert veterinary clinical inspector performing an individual animal welfare and diagnostic assessment.
-You are examining a close-up image of a single animal (primarily focusing on the head, ears, nose, eyes, mouth, or specific injury zones).
+IND_SYSTEM_PROMPT = """Ти — експертний ветеринарний клінічний інспектор, що проводить індивідуальну оцінку благополуччя та діагностику тварини.
+Ти оглядаєш фотографію однієї тварини зблизька (зосереджуючись переважно на голові, вухах, носі, очах, пащі або специфічних зонах ураження).
 
-CRITICAL FIRST STEP - DETERMINE IMAGE TYPE:
-Determine if the image is a Thermal/Infrared photo (contains false colors like glowing red/white, blue/green cold spots, thermal scales) OR a Standard Visible-Light photo.
+КРИТИЧНИЙ ПЕРШИЙ КРОК - ВИЗНАЧЕННЯ ТИПУ ЗОБРАЖЕННЯ:
+Визнач, чи є зображення тепловізійним/інфрачервоним (містить штучні кольори, як-от яскраво червоний/білий, холодні сині/зелені плями, теплові шкали) АБО це звичайне фото у видимому світлі.
 
-SCENARIO A: THERMAL IMAGE
-1. THERMAL STRESS MARKER: Analyze the temperature delta between the eye and the extremities (ears/beak). High eye temp relative to the extremities indicates acute physiological stress.
-2. SWELLING TEMPERATURE: Analyze swellings. Cold areas (blue/green) indicate chronic lesions, old hematomas, or ischemia. Hot areas (red/white) indicate acute inflammation.
+СЦЕНАРІЙ А: ТЕПЛОВІЗІЙНЕ ЗОБРАЖЕННЯ
+1. МАРКЕР ТЕПЛОВОГО СТРЕСУ: Проаналізуй дельту температур між оком та кінцівками (вуха/дзьоб). Висока температура ока відносно кінцівок свідчить про гострий фізіологічний стрес.
+2. ТЕМПЕРАТУРА НАБРЯКІВ: Проаналізуй набряки. Холодні зони (сині/зелені) вказують на хронічні ураження, старі гематоми або ішемію. Гарячі зони (червоні/білі) вказують на гостре запалення.
 
-SCENARIO B: STANDARD VISIBLE-LIGHT IMAGE
-1. Explicitly state in the report: "Тепловізійна оцінка не проводилась (звичайне фото)". Do not hallucinate thermal data.
+СЦЕНАРІЙ Б: ЗВИЧАЙНЕ ФОТО У ВИДИМОМУ СВІТЛІ
+1. Чітко вкажи у звіті: "Тепловізійна оцінка не проводилась (звичайне фото)". Не вигадуй теплові дані.
 
-FOR BOTH SCENARIOS (CLINICAL AUDIT):
-1. SYMMETRY OF SWELLINGS: Examine the geometry of the head/zone. Asymmetric swelling = mechanical trauma, blunt force, or localized abscess. Symmetric swelling = potential systemic pathology.
-2. TRAUMA & BLOOD: Look for fresh red blood, skin cuts, linear bruises, and signs of abuse.
-3. TARGETED PATHOLOGY MARKERS: Actively search for specific markers requested in the user prompt (e.g., eye inflammation, discharge, salivation, enophthalmos, necrosis).
+ДЛЯ ОБОХ СЦЕНАРІЇВ (КЛІНІЧНИЙ АУДИТ):
+1. СИМЕТРІЯ НАБРЯКІВ: Досліди геометрію голови/зони. Асиметричний набряк = механічна травма, тупий удар або локалізований абсцес. Симетричний набряк = потенційна системна патологія.
+2. ТРАВМИ ТА КРОВ: Шукай свіжу червону кров, порізи шкіри, лінійні синці та ознаки знущань.
+3. ЦІЛЬОВІ ПАТОЛОГІЧНІ МАРКЕРИ: Активно шукай специфічні маркери, зазначені у запиті (наприклад, запалення очей, виділення, слинотеча, енофтальм, некроз).
 
-OUTPUT FORMAT:
-Generate a dedicated "Акт індивідуального клінічного огляду тварини" strictly in Ukrainian, using Markdown format with a structured clinical table."""
+ФОРМАТ ВИВОДУ:
+Згенеруй "Акт індивідуального клінічного огляду тварини" виключно українською мовою у форматі Markdown із структурованою клінічною таблицею."""
 
 def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual_reports):
     def get_api_key():
@@ -41,7 +41,7 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
     
     dd_species = ft.Dropdown(
         label="Вид тварини (Індивідуальний огляд)", 
-        options=[ft.dropdown.Option(x) for x in ["Свиня", "ВРХ", "Індик", "Курка", "Цесарка", "Кріль"]], 
+        options=[ft.dropdown.Option(x) for x in ["Свиня", "ВРХ", "Вівці", "Кози", "Індики", "Кури", "Кролі"]], 
         value="Свиня", 
         width=380
     )
@@ -87,8 +87,10 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
                 species_markers = {
                     "Свиня": "Зосередься на: некроз вушних раковин, 'слізні доріжки' (патьоки під очима від аміаку), запалі очі (енофтальм/зневоднення), червоні запалені очі, виділення з носа, слинотеча, піна з рота, набряклий язик, асиметрія рила.",
                     "ВРХ": "Зосередься на: червоні запалені очі, рясні виділення з носа або очей, слинотеча, набряклий язик, запалі очі (зневоднення), симетрія морди.",
-                    "Індик": "Зосередься на: запалені очі, виділення з дзьоба/очей, набряк синусів (під очима), травми дзьоба, стан придатків голови.",
-                    "Курка": "Зосередься на: виділення з очей/дзьоба, блідість/синюшність гребеня, набряк голови, заплющені або запалі очі.",
+                    "Вівці": "Зосередься на: запалені очі, виділення з носа/очей, стан слизових оболонок, ознаки зневоднення (енофтальм), набряки підщелепного простору.",
+                    "Кози": "Зосередься на: пошкодження рогів, виділення з носа/очей, запалення слизових, набряки суглобів, слинотеча.",
+                    "Індики": "Зосередься на: запалені очі, виділення з дзьоба/очей, набряк синусів (під очима), травми дзьоба, стан придатків голови.",
+                    "Кури": "Зосередься на: виділення з очей/дзьоба, блідість/синюшність гребеня, набряк голови, заплющені або запалі очі.",
                     "Цесарка": "Зосередься на: виділення з носових отворів, запалення слизових, набряки в області голови, травми від розкльову.",
                     "Кріль": "Зосередься на: положення та некроз вух, виділення з очей та носа, слинотеча (мокра мордочка), запалені очі."
                 }
