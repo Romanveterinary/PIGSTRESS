@@ -25,7 +25,8 @@ EVALUATION PARAMETERS:
 1. THERMAL: If thermal/PIP insert exists, analyze it. If NOT, strictly state "Тепловізійна оцінка не проводилась" and do not guess.
 2. HYGIENE: Look for manure, blocked slatted floors, dirt, flies.
 3. VISUAL ESTIMATION: Estimate the approximate average live weight of the group.
-4. BIOLOGICAL MARKERS FOR RISK LEVEL (1 TO 5):
+4. QUANTITY: Provide an estimated headcount of the animals visible in the photo.
+5. BIOLOGICAL MARKERS FOR RISK LEVEL (1 TO 5):
    - [RISK_5] (CRITICAL): Fresh red blood, open wounds, active fighting, unable to stand, severe lameness, necrosis.
    - [RISK_4] (HIGH): Severe panic huddling, unnatural posture, open-mouth breathing/panting.
    - [RISK_3] (MODERATE): Mild huddling, escape behavior, swollen joints, minor injuries.
@@ -66,6 +67,7 @@ REPORT_TEMPLATE_UK = """
 | Показник | Значення / Статус | Оцінка |
 | :--- | :--- | :--- |
 | 🧬 **Вид тварин** | {SPECIES_NAME} | - |
+| 🔢 **Кількість** | (Орієнтовне число) | Голів |
 | 🎯 **Рівень Стресу** | Рівень X | (Колір: 🟢 Норма, 🟡 Тривога, 🟠 Помірний, 🔴 Високий, 🛑 Критичний) |
 | 🌡️ **Тіло (Термограма)** | (Опиши дельту АБО "Тепловізійна оцінка не проводилась") | (Норма/Підвищена/Немає даних) |
 | 🌦️ **Сезонний Ризик** | (Вкажи поточну пору року та час) | (Оцінка температурного навантаження) |
@@ -283,9 +285,10 @@ def main(page: ft.Page):
     dd_location = ft.Dropdown(label="Тип локації", options=[ft.dropdown.Option("slaughter", "Забійний пункт"), ft.dropdown.Option("farm", "Ферма"), ft.dropdown.Option("transport", "Транспорт")], value="slaughter", width=380)
     dd_species = ft.Dropdown(label="Вид тварини", options=[ft.dropdown.Option(x) for x in ["Свиня", "ВРХ", "Індик", "Курка", "Цесарка", "Кріль"]], value="Свиня", width=380)
     cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Повні назви законів)", value=False)
+    tf_custom_prompt = ft.TextField(label="Додаткові інструкції для ШІ (опціонально)", multiline=True, min_lines=1, max_lines=3, width=380)
     
     options_panel = ft.Column([
-        tf_sender, tf_receiver, dd_location, dd_species, cb_legal,
+        tf_sender, tf_receiver, dd_location, dd_species, cb_legal, tf_custom_prompt,
         ft.Container(content=ft.Row([btn_gps, gps_status], alignment=ft.MainAxisAlignment.START, spacing=10), margin=ft.margin.only(top=10, bottom=10))
     ], visible=False, spacing=10)
 
@@ -311,17 +314,19 @@ def main(page: ft.Page):
             "Індик": "Зосередься на: стан оперення, травми ніг, ознаки розкльову, скупчення, опущені крила.",
             "Курка": "Зосередься на: важке дихання (відкритий дзьоб), втрата пір'я, блідість гребеня, скупчення.",
             "Цесарка": "Зосередься на: підвищена нервозність, травми від паніки, стан оперення, дихання.",
-            "Кріль": "Зосередься на: положення вух, прискорене дихання, виділення з очей/носа, скупчення."
+            "Кріль": "Зосередься на: положення вух, прискорене дихання, виділення з очeй/носа, скупчення."
         }
         
         legal_instr = ""
         if cb_legal.value:
             legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. Вказуй ПОВНІ юридичні назви нормативних актів. Обов'язково застосовуй Наказ № 28 (а не 288). Заборонено скорочувати назви законів та наказів."
             
+        custom_instr = f"ОБОВ'ЯЗКОВА ДОДАТКОВА ВКАЗІВКА ВІД ІНСПЕКТОРА: {tf_custom_prompt.value}" if tf_custom_prompt.value.strip() else ""
+            
         sys_time = current_telemetry['time'] or datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
         prompt_template = REPORT_TEMPLATE_UK.replace('{LOCATION_CONTEXT}', loc_ctx).replace('{SPECIES_NAME}', species_val)
         
-        prompt = f"Вид тварин: {species_val}. {species_rules.get(species_val, '')}\nЧас: {sys_time}. Локація: {loc_ctx}. {legal_instr}\nНапиши звіт українською за шаблоном:\n{prompt_template}"
+        prompt = f"Вид тварин: {species_val}. {species_rules.get(species_val, '')}\nЧас: {sys_time}. Локація: {loc_ctx}. {legal_instr}\n{custom_instr}\nНапиши звіт українською за шаблоном:\n{prompt_template}"
         
         api_key = get_saved_key()
         if not api_key: risk_text.value = "❌ Помилка ключа"; progress_ring.visible = False; risk_circle.content.controls[0].visible = True; page.update(); return
