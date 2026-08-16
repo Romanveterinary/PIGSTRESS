@@ -37,27 +37,48 @@ SMART-SEASON LOGIC:
 - SUMMER + MIDDAY: Warn about heat stress.
 - AUTUMN/WINTER: Warn about cold stress.
 
+--- LEGAL AUDIT RULES (STRICT! DO NOT HALLUCINATE! NEVER INVENT DATES OR LAWS) ---
+If the user requests a legal audit, you MUST USE ONLY the following triggers and EXACT outputs. NEVER cite any other decrees, laws, or EU regulations.
+
+[НАКАЗ № 1032 від 02.04.2024]
+- TRIGGER: Бруд, гній на шкірі або шерсті.
+  OUTPUT: Порушення вимог щодо забезпечення чистоти шкіри та шерсті тварин перед забоєм (Розділ II, гл. 1, п. 5 Наказу Мінагрополітики № 1032 від 02.04.2024).
+- TRIGGER: Свіжі травми, відкриті рани, кров, переломи, синці.
+  OUTPUT: Наявність травм / крововиливів / переломів, що вимагає вилучення тканин або утилізації (Розділ V, гл. 6 Наказу Мінагрополітики № 1032 від 02.04.2024).
+- TRIGGER: Крайнє виснаження.
+  OUTPUT: Ознаки виснаження (аліментарної дистрофії), підстава для вибракування туші (Розділ V, гл. 1 Наказу Мінагрополітики № 1032 від 02.04.2024).
+- TRIGGER (ПТИЦЯ): Синюшність гребенів, травми на кілі, розкльов.
+  OUTPUT: Травми / намуляння / синюшність придатків голови птиці (Розділ VI, гл. 30, 32 Наказу Мінагрополітики № 1032 від 02.04.2024).
+- TRIGGER: Пухлини, абсцеси, жовтяничність.
+  OUTPUT: Ознаки новоутворень / гнійних запалень / жовтяничності (Розділ V, гл. 4, 8 Наказу Мінагрополітики № 1032 від 02.04.2024).
+
+[НАКАЗ № 224 від 08.02.2021]
+- TRIGGER: Критичне скупчення, неможливість змінити позу.
+  OUTPUT: Порушення вимог простору та свободи пересування (п. 10 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
+- TRIGGER: Забруднення годівниць/напувалок, енофтальм (зневоднення).
+  OUTPUT: Порушення доступу до води та мінімізації забруднення (п. 19-21 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
+- TRIGGER: Токсичний мікроклімат (слізні доріжки, відкрита паща).
+  OUTPUT: Порушення норм мікроклімату, запиленості та концентрації газів (п. 13 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
+- TRIGGER: Травматичне обладнання, антисанітарія підлоги (провалювання ніг, гострі краї).
+  OUTPUT: Порушення вимог до конструкції та матеріалів приміщень (п. 11-12 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
+- TRIGGER: Канібалізм, некроз вух, відсутність ізоляції хворих.
+  OUTPUT: Порушення заборони на каліцтво та вимог ізоляції хворих (п. 9, 23 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
+
+[НАКАЗ № 28 від 07.06.2002]
+- TRIGGER: Зміни шкірного покриву (рани, синці, абсцеси, жовтяничність).
+  OUTPUT: Порушення цілісності шкірного покриву, рани/синці або зміна кольору слизових (п. 4.2 Правил, Наказ Держдепартаменту ветмедицини № 28 від 07.06.2002).
+- TRIGGER: Аномальна поза, нервові розлади, здуття.
+  OUTPUT: Ознаки розладів нервової системи, неприродної пози або здуття рубця (п. 4.2, 8.2 Правил, Наказ Держдепартаменту ветмедицини № 28 від 07.06.2002).
+- TRIGGER: Травми, великі опіки, відкриті переломи.
+  OUTPUT: Свіжі травми, опіки або переломи кісток із просоченням тканин кров'ю (п. 8.8 Правил, Наказ Держдепартаменту ветмедицини № 28 від 07.06.2002).
+- TRIGGER (ПТИЦЯ): Скуйовджене оперення, набрякання синусів, віспинки.
+  OUTPUT: Набрякання синусів, витікання або віспинки - заборона на загальний забій (п. 4.7 Правил, Наказ Держдепартаменту ветмедицини № 28 від 07.06.2002).
+
+IF NO TRIGGERS ARE MET IN THE PHOTO, DO NOT CITE ANY LAWS.
+-------------------------------------------------------------------------
+
 OUTPUT FORMAT:
 Generate the report strictly using the exact Markdown TABLE template provided."""
-
-def load_regulations():
-    laws_text = "\n\n--- LEGAL KNOWLEDGE BASE (STRICT INSTRUCTIONS: USE ONLY THESE REGULATIONS FOR LEGAL AUDIT, DO NOT INVENT) ---\n"
-    base_dir = os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, 'frozen', False) else os.path.dirname(sys.executable)
-    reg_dir = os.path.join(base_dir, "regulations")
-    
-    for file_name in ["ua_laws.json", "eu_laws.json"]:
-        path = os.path.join(reg_dir, file_name)
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    laws_text += f"\nSource: {file_name}\n"
-                    laws_text += json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-            except Exception as e:
-                pass
-    return laws_text
-
-SYSTEM_PROMPT += load_regulations()
 
 REPORT_TEMPLATE_UK = """
 [RISK_X]
@@ -284,7 +305,7 @@ def main(page: ft.Page):
     tf_receiver = ft.TextField(label="Отримувач", value=page.client_storage.get("last_receiver") or "", width=380)
     dd_location = ft.Dropdown(label="Тип локації", options=[ft.dropdown.Option("slaughter", "Забійний пункт"), ft.dropdown.Option("farm", "Ферма"), ft.dropdown.Option("transport", "Транспорт")], value="slaughter", width=380)
     dd_species = ft.Dropdown(label="Вид тварини", options=[ft.dropdown.Option(x) for x in ["Свиня", "ВРХ", "Індик", "Курка", "Цесарка", "Кріль"]], value="Свиня", width=380)
-    cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Повні назви законів)", value=False)
+    cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Згідно тригерів бази)", value=False)
     tf_custom_prompt = ft.TextField(label="Додаткові інструкції для ШІ (опціонально)", multiline=True, min_lines=1, max_lines=3, width=380)
     
     options_panel = ft.Column([
@@ -319,7 +340,7 @@ def main(page: ft.Page):
         
         legal_instr = ""
         if cb_legal.value:
-            legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. Вказуй ПОВНІ юридичні назви нормативних актів. Обов'язково застосовуй Наказ № 28 (а не 288). Заборонено скорочувати назви законів та наказів."
+            legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. ВИКОРИСТОВУЙ ТІЛЬКИ ТЕКСТ З БАЗИ 'LEGAL AUDIT RULES'. ЗАБОРОНЕНО вигадувати закони, дати або писати свої висновки. Якщо тригери не спрацювали, нічого не пиши в цей розділ."
             
         custom_instr = f"ОБОВ'ЯЗКОВА ДОДАТКОВА ВКАЗІВКА ВІД ІНСПЕКТОРА: {tf_custom_prompt.value}" if tf_custom_prompt.value.strip() else ""
             
