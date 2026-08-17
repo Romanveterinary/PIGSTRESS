@@ -404,15 +404,46 @@ def main(page: ft.Page):
         page.update()
         threading.Thread(target=process_analysis).start()
 
+    # ОНОВЛЕНО: Функція подвійного збереження в ізольовану директорію
     def on_save_click(e):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        fn = f"VetAI_Report_{timestamp}.html"
+        species_val = dd_species.value
+        base_fn = f"{timestamp}_{species_val}"
+        
         andr_dl = "/storage/emulated/0/Download"
+        
         if os.path.exists(andr_dl):
-            with open(os.path.join(andr_dl, fn), "w", encoding="utf-8") as f: f.write(get_html_content())
-            dlg = ft.AlertDialog(title=ft.Text("✅ ЗБЕРЕЖЕНО"), content=ft.Text(f"Акт збережено у Download:\n{fn}"))
-            page.overlay.append(dlg); dlg.open = True; page.update()
-        else: save_picker.save_file(file_name=fn, allowed_extensions=["html"])
+            reports_dir = os.path.join(andr_dl, "PigStress_Reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            
+            html_fn = f"{base_fn}.html"
+            json_fn = f"{base_fn}.json"
+            
+            html_path = os.path.join(reports_dir, html_fn)
+            json_path = os.path.join(reports_dir, json_fn)
+            
+            # 1. Збереження HTML презентації
+            with open(html_path, "w", encoding="utf-8") as f: 
+                f.write(get_html_content())
+                
+            # 2. Збереження JSON бази для машинної аналітики
+            report_data = {
+                "timestamp": timestamp,
+                "sender": tf_sender.value,
+                "receiver": tf_receiver.value,
+                "location_type": dd_location.value,
+                "species": species_val,
+                "report_text": last_report_text[0]
+            }
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(report_data, f, ensure_ascii=False, indent=4)
+                
+            dlg = ft.AlertDialog(title=ft.Text("✅ ЗБЕРЕЖЕНО"), content=ft.Text(f"Акт та дані збережено в:\nDownload/PigStress_Reports/"))
+            page.overlay.append(dlg)
+            dlg.open = True
+            page.update()
+        else: 
+            save_picker.save_file(file_name=f"{base_fn}.html", allowed_extensions=["html"])
 
     btn_pick = ft.IconButton(icon=ft.Icons.ADD_A_PHOTO, icon_size=40, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
     btn_analyze = ft.IconButton(icon=ft.Icons.FINGERPRINT, icon_size=40, icon_color="green_700", visible=False, on_click=on_analyze)
