@@ -269,8 +269,20 @@ def main(page: ft.Page):
                 * Негайне знекровлення.
             </div>"""
 
+        docs_html = ""
+        has_docs = any(doc for doc in global_docs_base64 if doc)
+        if has_docs:
+            docs_html += '<div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">'
+            docs_html += '<h3 style="color: #0d47a1;">📎 СУПРОВІДНІ ДОКУМЕНТИ</h3>'
+            docs_html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">'
+            for doc_b64 in global_docs_base64:
+                if doc_b64:
+                    docs_html += f'<img src="data:image/jpeg;base64,{doc_b64}" style="max-width: 48%; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 10px;" />'
+            docs_html += '</div></div>'
+
         legal_footer = f"""
         {sanitation_memo}
+        {docs_html}
         <div style="margin-top: 40px; border-top: 2px solid #0d47a1; padding-top: 20px;">
             <h3 style="color: #0d47a1;">📝 ВЛАСНА ОЦІНКА ВЕТЕРИНАРНОГО ЛІКАРЯ</h3>
             <p style="border-bottom: 1px solid #ccc; height: 30px; margin: 10px 0;"></p>
