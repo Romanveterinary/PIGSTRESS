@@ -476,7 +476,7 @@ def main(page: ft.Page):
         main_content.content = doc_proc.get_document_processor_view(page, show_express, global_docs_base64); page.update()
 
     def show_individual(e=None):
-        main_content.content = ind_anf.get_individual_analyzer_view(page, show_express, global_individual_reports); page.update()
+        main_content.content = ind_anf.get_individual_analyzer_view(page, show_express, global_individual_reports, current_telemetry, geolocator); page.update()
 
     # ВІДНОВЛЕНО: Кнопка виходу та логіка її відпрацювання
     def on_exit_click(e):
