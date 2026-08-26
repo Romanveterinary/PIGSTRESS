@@ -5,6 +5,7 @@ import base64
 import threading
 import os
 import datetime
+import time
 
 IND_SYSTEM_PROMPT = """Ти — експертний ветеринарний клінічний інспектор. Оглядаєш фотографію тварини зблизька.
 
@@ -49,7 +50,7 @@ IND_SYSTEM_PROMPT = """Ти — експертний ветеринарний к
 (Якщо виявлено відхилення — обов'язково опиши дії щодо ізоляції, термометрії та нагляду за алгоритмом безпеки).
 """
 
-def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual_reports):
+def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual_reports, current_telemetry, geolocator):
     def get_api_key():
         try:
             if os.path.exists("pig_api_key.txt"):
@@ -70,6 +71,38 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
         width=380
     )
     
+    gps_status = ft.Text("GPS не визначено (Аналіз дозволено)", color="orange_700", size=13)
+    
+    def check_gps_update():
+        time.sleep(2)
+        if current_telemetry.get('lat'):
+            gps_status.value = f"✅ Зафіксовано: {current_telemetry['lat']:.5f}, {current_telemetry['lon']:.5f}"
+            gps_status.color = "green_700"
+        else:
+            gps_status.value = "❌ Сигнал відсутній (Аналіз дозволено)"
+            gps_status.color = "red_700"
+        page.update()
+
+    def on_gps_click(e):
+        gps_status.value = "⏳ Опитування датчика..."
+        gps_status.color = "blue_700"
+        page.update()
+        if geolocator:
+            try:
+                geolocator.get_current_position()
+                threading.Thread(target=check_gps_update, daemon=True).start()
+            except Exception:
+                gps_status.value = "❌ Помилка виклику датчика"
+                gps_status.color = "red_700"
+                page.update()
+        else:
+            gps_status.value = "❌ Апаратний GPS відсутній"
+            gps_status.color = "red_700"
+            page.update()
+
+    btn_gps = ft.ElevatedButton("📍 Отримати GPS", on_click=on_gps_click, bgcolor="blue_50", color="blue_900")
+    gps_panel = ft.Row([btn_gps, gps_status], alignment=ft.MainAxisAlignment.CENTER)
+
     img_preview = ft.Image(width=380, height=220, fit=ft.ImageFit.CONTAIN, visible=False, border_radius=10)
     progress_bar = ft.ProgressBar(width=380, visible=False)
     txt_status = ft.Text("Виберіть вид та завантажте фото (тепловізор або звичайна камера):", color="grey_800")
@@ -80,8 +113,26 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
     def get_html_content():
         b64_img = last_b64_img[0]
         species = dd_species.value
-        time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         report_text = last_report_text[0]
+        
+        telemetry_time = current_telemetry['time'] or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if current_telemetry['lat'] and current_telemetry['lon']:
+            telemetry_gps = f"<a href='{current_telemetry['maps_link']}' target='_blank'>🗺️ Відкрити на Google Maps</a> ({current_telemetry['lat']:.6f}, {current_telemetry['lon']:.6f})"
+            map_iframe = f'<div style="margin-top: 10px;"><iframe width="100%" height="250" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" src="https://maps.google.com/maps?q={current_telemetry["lat"]},{current_telemetry["lon"]}&hl=uk&z=15&output=embed" style="border-radius: 8px; border: 1px solid #ccc;"></iframe></div>'
+        else:
+            telemetry_gps = "<span style='color: #b71c1c; font-weight: bold;'>АППАРАТНИЙ GPS ВІДСУТНІЙ (аналіз без локалізації)</span>"
+            map_iframe = ""
+            
+        telemetry_html_block = f"""
+        <div style="margin-bottom: 20px; background: #fffde7; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 6px;">
+            <h3 style="color: #f57f17; margin-top: 0; margin-bottom: 10px;">📡 АПАРАТНА ТЕЛЕМЕТРІЯ</h3>
+            <div style="font-size: 14px; line-height: 1.6;">
+                <strong>🕒 Час фіксації:</strong> {telemetry_time}<br>
+                <strong>📍 Координати:</strong> {telemetry_gps}
+            </div>
+            {map_iframe}
+        </div>
+        """
         
         return f"""<!DOCTYPE html><html lang="uk"><head><meta charset="utf-8"><title>Індивідуальний Аналіз</title>
         <style>body {{ font-family: sans-serif; padding: 30px; max-width: 800px; margin: auto; color: #333; line-height: 1.6; }}
@@ -90,7 +141,8 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
         table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }} th {{ background-color: #f2f2f2; }}
         </style></head><body>
         <h1>🔬 АКТ ІНДИВІДУАЛЬНОГО КЛІНІЧНОГО ОГЛЯДУ</h1>
-        <div class="info"><strong>Вид тварини:</strong> {species}<br><strong>Час фіксації:</strong> {time_now}</div>
+        <div class="info"><strong>Вид тварини:</strong> {species}</div>
+        {telemetry_html_block}
         <div style="text-align: center; margin: 20px 0;"><img src="data:image/jpeg;base64,{b64_img}" /></div>
         <div class="box">{report_text}</div>
         <div style="margin-top: 40px; border-top: 2px solid #b71c1c; padding-top: 20px;">
@@ -242,6 +294,7 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
         lbl_title,
         ft.Divider(),
         dd_species,
+        gps_panel,
         img_preview,
         ft.Row([btn_pick, btn_analyze, btn_save], alignment=ft.MainAxisAlignment.CENTER, wrap=True),
         ft.Container(height=5),
