@@ -284,9 +284,9 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
 
         threading.Thread(target=run, daemon=True).start()
 
-    btn_pick = ft.ElevatedButton("📸 Фото голови / Зони", icon=ft.Icons.CAMERA, on_click=lambda _: ind_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
-    btn_analyze = ft.ElevatedButton("🔬 Провести клінічний аналіз", icon=ft.Icons.ANALYTICS, visible=False, bgcolor="red_900", color="white", on_click=run_clinical_analysis)
-    btn_save = ft.ElevatedButton("💾 Зберегти HTML-Звіт", icon=ft.Icons.SAVE, visible=False, bgcolor="green_900", color="white", on_click=on_save_click)
+    btn_pick = ft.ElevatedButton("📸 Фото голови / Зони", icon=ft.icons.CAMERA, on_click=lambda _: ind_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
+    btn_analyze = ft.ElevatedButton("🔬 Провести клінічний аналіз", icon=ft.icons.ANALYTICS, visible=False, bgcolor="red_900", color="white", on_click=run_clinical_analysis)
+    btn_save = ft.ElevatedButton("💾 Зберегти HTML-Звіт", icon=ft.icons.SAVE, visible=False, bgcolor="green_900", color="white", on_click=on_save_click)
     btn_back = ft.TextButton("⬅️ Назад до головного екрану", on_click=on_back_click)
 
     view = ft.Column([

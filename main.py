@@ -60,7 +60,7 @@ SYSTEM_PROMPT = """Ти — елітний, суворо ОБ'ЄКТИВНИЙ �
 - TRIGGER: Критичне скупчення, неможливість змінити позу.
   OUTPUT: Порушення вимог щодо надання простору, що задовольняє фізіологічні та етологічні потреби, та заборони обмеження свободи пересування (п. 10 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
 - TRIGGER: Забруднення годівниць/напувалок, запалі очі (енофтальм).
-  OUTPUT: Порушення вимог щодо забезпечення постійного доступу до води та мінімізації забруднення кормів/води (п. 19-21 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
+  OUTPUT: Порушення вимог щодо забезпечення постійного доступу до води靔 мінімізації забруднення кормів/води (п. 19-21 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
 - TRIGGER: Токсичний мікроклімат (слізні доріжки, червоні очі, масове дихання відкритою пащею).
   OUTPUT: Візуальні маркери порушення норм циркуляції, рівня запиленості та концентрації газів (п. 13 Загальних вимог Наказу Мінекономіки № 224 від 08.02.2021).
 - TRIGGER: Травматичне обладнання, антисанітарія підлоги (забиті гноєм щілясті підлоги, гострі краї).
@@ -333,11 +333,11 @@ def main(page: ft.Page):
     ], visible=False, spacing=10)
 
     img_preview = ft.Image(width=380, height=220, fit=ft.ImageFit.CONTAIN, visible=False, border_radius=10)
-    img_placeholder = ft.Container(content=ft.Column([ft.Icon(ft.Icons.CAMERA_ALT, size=40, color="grey"), ft.Text("Фото групи тварин...", color="grey")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), width=380, height=220, bgcolor="#EEEEEE", border_radius=10)
+    img_placeholder = ft.Container(content=ft.Column([ft.Icon(ft.icons.CAMERA_ALT, size=40, color="grey"), ft.Text("Фото групи тварин...", color="grey")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), width=380, height=220, bgcolor="#EEEEEE", border_radius=10)
     
     risk_text = ft.Text("ОЧІКУВАННЯ", color="white", weight="bold")
     progress_ring = ft.ProgressRing(color="white", visible=False)
-    risk_circle = ft.Container(width=140, height=140, border_radius=70, bgcolor="grey", content=ft.Column([ft.Icon(ft.Icons.MONITOR_HEART, color="white", size=30), progress_ring, risk_text], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.BLACK26))
+    risk_circle = ft.Container(width=140, height=140, border_radius=70, bgcolor="grey", content=ft.Column([ft.Icon(ft.icons.MONITOR_HEART, color="white", size=30), progress_ring, risk_text], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), shadow=ft.BoxShadow(blur_radius=10, color=ft.colors.BLACK26))
     
     ai_answer = ft.Markdown(selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED)
     report_container = ft.Container(content=ft.Column([ai_answer], scroll=ft.ScrollMode.AUTO), padding=15, bgcolor="#F5F5F5", border_radius=10, height=350, visible=False)
@@ -457,9 +457,9 @@ def main(page: ft.Page):
         else: 
             save_picker.save_file(file_name=f"{base_fn}.html", allowed_extensions=["html"])
 
-    btn_pick = ft.IconButton(icon=ft.Icons.ADD_A_PHOTO, icon_size=40, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
-    btn_analyze = ft.IconButton(icon=ft.Icons.FINGERPRINT, icon_size=40, icon_color="green_700", visible=False, on_click=on_analyze)
-    btn_save = ft.IconButton(icon=ft.Icons.SAVE_ALT, icon_size=40, icon_color="deep_orange_700", visible=False, on_click=on_save_click)
+    btn_pick = ft.IconButton(icon=ft.icons.ADD_A_PHOTO, icon_size=40, icon_color="blue_900", on_click=lambda _: fp_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
+    btn_analyze = ft.IconButton(icon=ft.icons.FINGERPRINT, icon_size=40, icon_color="green_700", visible=False, on_click=on_analyze)
+    btn_save = ft.IconButton(icon=ft.icons.SAVE_ALT, icon_size=40, icon_color="deep_orange_700", visible=False, on_click=on_save_click)
 
     express_view = ft.Column([
         img_placeholder, img_preview, options_panel,
@@ -487,15 +487,15 @@ def main(page: ft.Page):
     top_bar = ft.Row([
         ft.Text(APP_TITLE, size=22, weight="bold", color="blue_900"),
         ft.Row([
-            ft.IconButton(icon=ft.Icons.SETTINGS, on_click=lambda e: (setattr(dlg_settings, 'open', True), page.update())),
-            ft.IconButton(icon=ft.Icons.EXIT_TO_APP, icon_color="red_900", on_click=on_exit_click)
+            ft.IconButton(icon=ft.icons.SETTINGS, on_click=lambda e: (setattr(dlg_settings, 'open', True), page.update())),
+            ft.IconButton(icon=ft.icons.EXIT_TO_APP, icon_color="red_900", on_click=on_exit_click)
         ])
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
     nav_tabs = ft.Row([
-        ft.ElevatedButton("🚚 Група", icon=ft.Icons.GROUPS, on_click=show_express, bgcolor="blue_50", color="blue_900"),
-        ft.ElevatedButton("📄 Папери", icon=ft.Icons.DOCUMENT_SCANNER, on_click=show_docs, bgcolor="blue_50", color="blue_900"),
-        ft.ElevatedButton("🔬 Огляд", icon=ft.Icons.BIOTECH, on_click=show_individual, bgcolor="red_50", color="red_900"),
+        ft.ElevatedButton("🚚 Група", icon=ft.icons.GROUPS, on_click=show_express, bgcolor="blue_50", color="blue_900"),
+        ft.ElevatedButton("📄 Папери", icon=ft.icons.DOCUMENT_SCANNER, on_click=show_docs, bgcolor="blue_50", color="blue_900"),
+        ft.ElevatedButton("🔬 Огляд", icon=ft.icons.BIOTECH, on_click=show_individual, bgcolor="red_50", color="red_900"),
     ], alignment=ft.MainAxisAlignment.CENTER, spacing=5)
 
     if geolocator:
