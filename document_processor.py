@@ -51,14 +51,14 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
     md_output = ft.Markdown(selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED)
     res_container = ft.Container(content=md_output, padding=15, bgcolor="#e8f5e9", border_radius=10, height=320, visible=False, border=ft.border.all(2, "#4caf50"))
 
-    status_icons = [ft.Icon(ft.icons.RADIO_BUTTON_UNCHECKED, color="grey") for _ in range(4)]
+    status_icons = [ft.Icon(ft.Icons.RADIO_BUTTON_UNCHECKED, color="grey") for _ in range(4)]
     
     def make_pick_handler(idx):
         def handler(e: ft.FilePickerResultEvent):
             if e.files and len(e.files) > 0:
                 path = e.files[0].path
                 doc_paths[idx] = path
-                status_icons[idx].name = ft.icons.CHECK_CIRCLE
+                status_icons[idx].name = ft.Icons.CHECK_CIRCLE
                 status_icons[idx].color = "green"
                 
                 try:
@@ -83,7 +83,7 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
         rows.append(ft.Row([
             status_icons[i],
             ft.Text(doc_labels[i], weight="bold", expand=True),
-            ft.IconButton(ft.icons.CENTER_FOCUS_STRONG if i==0 else ft.icons.UPLOAD_FILE, on_click=lambda _, picker=p: picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
+            ft.IconButton(ft.Icons.CENTER_FOCUS_STRONG if i==0 else ft.Icons.UPLOAD_FILE, on_click=lambda _, picker=p: picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
         ], width=380))
 
     def start_ocr(e):
@@ -155,7 +155,7 @@ def get_document_processor_view(page: ft.Page, on_back_click, global_docs_base64
     # Зробив кнопку помітною (Темно-синя)
     btn_scan = ft.ElevatedButton(
         "🔍 Зчитати дані (ФОП, QR, Голови)", 
-        icon=ft.icons.DOCUMENT_SCANNER, 
+        icon=ft.Icons.DOCUMENT_SCANNER, 
         visible=False, 
         bgcolor="#0d47a1", 
         color="white",
