@@ -16,7 +16,7 @@ IND_SYSTEM_PROMPT = """Ти — експертний ветеринарний к
 2. НАБРЯКИ ТА ТРАВМИ: Кров, порізи, лінійні синці, некроз тканин.
 3. ОЧІ ТА СЛИЗОВІ: Колір очей, стан слизових (бліді, гіперемовані/червоні, жовтяничні), виділення, слізні доріжки, енофтальм.
 4. ЗАБРУДНЕНІСТЬ: Стан шкірного покриву / оперення (гній, бруд, фекалії).
-5. ТЕПЛОВА ДЕЛЬТА (якщо є PiP / тепловізор): Різниця температур між оком та периферичними зонами.
+5. ТЕПЛОВА дельта (якщо є PiP / тепловізор): Різниця температур між оком та периферичними зонами.
 
 --- ВЕТЕРИНАРНІ ДІАГНОСТИЧНІ ТРИГЕРИ ТА ПІДОЗРИ ---
 - СВИНІ (Некроз вух, ціаноз кінчиків вух/кінцівок, крововиливи): Вкажи підозру на АЧС (Африканську чуму свиней) або цирковірусну інфекцію.
@@ -284,9 +284,9 @@ def get_individual_analyzer_view(page: ft.Page, on_back_click, global_individual
 
         threading.Thread(target=run, daemon=True).start()
 
-    btn_pick = ft.ElevatedButton("📸 Фото голови / Зони", icon=ft.icons.CAMERA, on_click=lambda _: ind_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
-    btn_analyze = ft.ElevatedButton("🔬 Провести клінічний аналіз", icon=ft.icons.ANALYTICS, visible=False, bgcolor="red_900", color="white", on_click=run_clinical_analysis)
-    btn_save = ft.ElevatedButton("💾 Зберегти HTML-Звіт", icon=ft.icons.SAVE, visible=False, bgcolor="green_900", color="white", on_click=on_save_click)
+    btn_pick = ft.ElevatedButton("📸 Фото голови / Зони", icon=ft.Icons.CAMERA, on_click=lambda _: ind_picker.pick_files(file_type=ft.FilePickerFileType.IMAGE))
+    btn_analyze = ft.ElevatedButton("🔬 Провести клінічний аналіз", icon=ft.Icons.ANALYTICS, visible=False, bgcolor="red_900", color="white", on_click=run_clinical_analysis)
+    btn_save = ft.ElevatedButton("💾 Зберегти HTML-Звіт", icon=ft.Icons.SAVE, visible=False, bgcolor="green_900", color="white", on_click=on_save_click)
     btn_back = ft.TextButton("⬅️ Назад до головного екрану", on_click=on_back_click)
 
     view = ft.Column([
