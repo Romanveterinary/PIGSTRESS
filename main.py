@@ -326,7 +326,7 @@ def main(page: ft.Page):
         
         dd_species = ft.Dropdown(label="Вид тварини", options=[ft.dropdown.Option(x) for x in ["Свиня", "ВРХ", "Вівці", "Кози", "Індики", "Кури", "Кролі"]], value="Свиня", width=380)
         cb_legal = ft.Checkbox(label="⚖️ Юридичний аудит (Згідно тригерів бази)", value=False)
-        tf_custom_prompt = ft.TextField(label="Додаткові інструкції для ШІ (опціонально)", multiline=True, min_lines=1, max_lines=3, width=380)
+        tf_custom_prompt = ft.TextField(label="Клінічний коментар лікаря щодо фото (Пріоритет)", multiline=True, min_lines=1, max_lines=3, width=380)
         
         options_panel = ft.Column([
             tf_sender, tf_receiver, dd_location, dd_species, cb_legal, tf_custom_prompt,
@@ -369,7 +369,7 @@ def main(page: ft.Page):
             if cb_legal.value:
                 legal_instr = "Додай розділ '⚖️ ЮРИДИЧНИЙ АУДИТ'. ВИКОРИСТОВУЙ ТІЛЬКИ ТЕКСТ З БАЗИ 'LEGAL AUDIT RULES'. ЗАБОРОНЕНО вигадувати закони, дати або писати свої висновки. Якщо тригери не спрацювали, нічого не пиши в цей розділ."
                 
-            custom_instr = f"ОБОВ'ЯЗКОВА ДОДАТКОВА ВКАЗІВКА ВІД ІНСПЕКТОРА: {tf_custom_prompt.value}" if tf_custom_prompt.value.strip() else ""
+            custom_instr = f"АБСОЛЮТНИЙ ПРІОРИТЕТ ЛІКАРЯ ДЛЯ ЦЬОГО ФОТО: {tf_custom_prompt.value.strip()}. Твій візуальний аналіз не повинен суперечити цим даним." if tf_custom_prompt.value.strip() else ""
                 
             sys_time = current_telemetry['time'] or datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
             prompt_template = REPORT_TEMPLATE_UK.replace('{LOCATION_CONTEXT}', loc_ctx).replace('{SPECIES_NAME}', species_val)
@@ -400,6 +400,8 @@ def main(page: ft.Page):
                 ai_answer.value = text.strip()
                 report_container.visible = True
                 btn_save.visible = True
+                
+                tf_custom_prompt.value = ""
             except Exception as e:
                 risk_text.value = "❌ Помилка"; print(e)
                 
