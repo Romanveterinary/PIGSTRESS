@@ -237,9 +237,17 @@ def main(page: ft.Page):
             receiver_text = tf_receiver.value or "Не вказано"
 
             telemetry_time = current_telemetry['time'] or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
             if current_telemetry['lat'] and current_telemetry['lon']:
                 telemetry_gps = f"<a href='{current_telemetry['maps_link']}' target='_blank'>🗺️ Відкрити на Google Maps</a> ({current_telemetry['lat']:.6f}, {current_telemetry['lon']:.6f})"
-                map_iframe = f'<div style="margin-top: 10px;"><iframe width="100%" height="250" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" src="https://maps.google.com/maps?q={current_telemetry["lat"]},{current_telemetry["lon"]}&hl=uk&z=15&output=embed" style="border-radius: 8px; border: 1px solid #ccc;"></iframe></div>'
+                try:
+                    map_url = f"https://staticmap.openstreetmap.de/staticmap.php?center={current_telemetry['lat']},{current_telemetry['lon']}&zoom=15&size=600x300&markers={current_telemetry['lat']},{current_telemetry['lon']},red-pushpin"
+                    req_map = urllib.request.Request(map_url, headers={'User-Agent': 'PigStressAI/1.0'})
+                    with urllib.request.urlopen(req_map, timeout=5) as map_response:
+                        map_b64 = base64.b64encode(map_response.read()).decode('utf-8')
+                    map_iframe = f'<div style="margin-top: 10px; text-align: center;"><img src="data:image/png;base64,{map_b64}" style="width: 100%; max-width: 600px; border-radius: 8px; border: 1px solid #ccc;" alt="Карта локації" /></div>'
+                except Exception as e:
+                    map_iframe = f'<div style="margin-top: 10px; padding: 10px; background: #ffebee; color: #b71c1c; border-radius: 6px;">⚠️ Помилка завантаження статичної карти: {e}</div>'
             else:
                 telemetry_gps = "<span style='color: #d32f2f; font-weight: bold;'>АППАРАТНИЙ GPS ВІДСУТНІЙ (аналіз без локалізації)</span>"
                 map_iframe = ""
