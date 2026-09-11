@@ -33,7 +33,7 @@ jobs:
         run: pip install flet==0.28.3
 
       - name: МАГІЯ! Збираємо APK файл (з дозволами)
-        run: flet build apk --product "PigStress" --org "com.roman.pigstress" --permissions location,camera,photo_library
+        run: flet build apk --product "PigStress" --org "com.roman.pigstress" --permissions location camera photo_library
 
       - name: Зберігаємо готовий додаток
         uses: actions/upload-artifact@v4
