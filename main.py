@@ -196,8 +196,11 @@ def main(page: ft.Page):
             gps_status.color = "blue_700"
             page.update()
             if geolocator:
-                try: geolocator.get_current_position()
-                except Exception: handle_location_error(None)
+                try: 
+                    geolocator.request_permission()
+                    geolocator.get_current_position()
+                except Exception: 
+                    handle_location_error(None)
             else:
                 handle_location_error(None)
 
@@ -501,9 +504,6 @@ def main(page: ft.Page):
             ft.ElevatedButton("📄 Папери", icon=ft.Icons.DOCUMENT_SCANNER, on_click=show_docs, bgcolor="blue_50", color="blue_900"),
             ft.ElevatedButton("🔬 Огляд", icon=ft.Icons.BIOTECH, on_click=show_individual, bgcolor="red_50", color="red_900"),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=5)
-
-        if geolocator:
-            page.add(ft.Row([ft.ElevatedButton("Надати дозвіл на GPS", on_click=lambda e: geolocator.request_permission())], alignment=ft.MainAxisAlignment.CENTER))
 
         page.add(ft.Column([top_bar, nav_tabs, ft.Divider(), main_content], horizontal_alignment=ft.CrossAxisAlignment.CENTER))
 
